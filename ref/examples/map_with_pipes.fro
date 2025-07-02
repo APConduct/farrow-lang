@@ -1,0 +1,9 @@
+-- Apply a function to each element
+map : (a => b) => List a => List b
+map = µ rec |-> f |-> xs ->
+    case xs of 
+        Nil => Nil
+        (Cons x xs) => Cons (f -> x) (rec -> f -> xs)
+    
+-- Usage
+(Cons 1 (Cons 2 Nil)) -> map (x |-> x * 2)  -- Cons 2 (Cons 2 Nil)

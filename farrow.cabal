@@ -54,12 +54,21 @@ extra-doc-files:    CHANGELOG.md
 common warnings
     ghc-options: -Wall
 
+library
+    hs-source-dirs:   src
+    exposed-modules: AST, Parser
+    build-depends:  base >=4.16,
+                    megaparsec >=9.6,
+                    parser-combinators >=1.3.0
+    default-language: Haskell2010
+
 executable farrow
     -- Import common warning flags.
     import:           warnings
 
     -- .hs or .lhs file containing the Main module.
     main-is:          Main.hs
+
 
     -- Modules included in this executable, other than Main.
     -- other-modules:
@@ -68,11 +77,22 @@ executable farrow
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.21.0.0, megaparsec >=9.6.1 && <10.0,
-                        text >=2.0 && <2.2
+    -- Other library packages from which modules are imported.
+    build-depends:    base ^>=4.21.0.0,
+                      megaparsec >=9.6.1 && <10.0,
+                      parser-combinators >=1.3.0,
+                      text >=2.0 && <2.2
 
     -- Directories containing source files.
     hs-source-dirs:   src
 
     -- Base language which the package is written in.
+    default-language: Haskell2010
+
+
+test-suite farrow-tests
+    type: exitcode-stdio-1.0
+    hs-source-dirs: test
+    main-is: ParserTest.hs
+    build-depends:  base, farrow, hspec >=2.11
     default-language: Haskell2010

@@ -1,0 +1,7 @@
+sum_list : List Int => Int
+sum_list := µ f |-> xs ->
+    case xs of 
+        Nil => 0
+        (Cons x xs) => x + f -> xs
+
+sum_list -> (Cons 1 (Cons 2 Nil))

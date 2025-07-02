@@ -1,4 +1,19 @@
-sort : List Int => List Int
-sort := µ rec |-> xs -> case of
+unc_sort : List Int => List Int
+unc_sort := µ rec |-> xs -> case of
     [] => []
     p:ps => (rec <- filter (_ < p) <- ps) ++ [p] ++ (rec <- filter (_ >= p) <- ps)
+
+sort : List Int => List Int
+sort := µ rec |-> xs ->
+    case cs of 
+        Nil => Nil
+        (Cons p ps) =>
+            (ps -> filter (x |-> x < p) -> rec)
+            -> append (Cons p Nil)
+            -> (ps -> filter (x |-> x >= p) -> rec)
+
+append : List a => List a => List a
+append := µ rec |-> xs |-> ys ->
+    case xs of
+        Nil => ys
+        (Cons x xs) => Cons x (rec -> xs -> ys)
