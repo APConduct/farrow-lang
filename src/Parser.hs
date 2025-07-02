@@ -44,7 +44,7 @@ parseExpr = do
 lambaExpr :: Parser Expr
 lambaExpr = do
   var <- some letterChar
-  symbol "|->"
+  _ <- symbol "|->"  -- Added _ <- to fix warning
   body <- parseExpr
   return $ Lamba var body
 
@@ -52,41 +52,44 @@ lambaExpr = do
 pipeExpr :: Parser Expr
 pipeExpr = chainl1 term (symbol "->" >> return Apply)
 
+
 -- Parse a let-binding (f := x |-> x + 1 in ...)
 letExpr :: Parser Expr
 letExpr = do
   name <- some letterChar
-  symbol ":="
+  _ <- symbol ":="  -- Added _ <- to fix warning
   value <- parseExpr
   -- Parse the "in" expression after the value
-  symbol "in"
+  _ <- symbol "in"  -- Added _ <- to fix warning
   body <- parseExpr
   return $ Let name value body
 
 -- Parse µ-recursion (µ f |-> n ...)
 muExpr :: Parser Expr
 muExpr = do
-  symbol "µ"
+  _ <- symbol "µ"  -- Added _ <- to fix warning
   f <- some letterChar
-  symbol "|->"
+  _ <- symbol "|->"  -- Added _ <- to fix warning
   body <- parseExpr
   return $ Mu f body
+
 
 
 -- Parse a case expression (case x of 0 => 1 | _ => 2)
 caseExpr :: Parser Expr
 caseExpr = do
-  symbol "case"
+  _ <- symbol "case"  -- Added _ <- to fix warning
   scrutinee <- parseExpr
-  symbol "of"
+  _ <- symbol "of"  -- Added _ <- to fix warning
   patterns <- sepBy1 branch (symbol "|")
   return $ Case scrutinee patterns
   where
     branch = do
       pat <- pattern
-      symbol "=>"
+      _ <- symbol "=>"  -- Added _ <- to fix warning
       expr <- parseExpr
       return (pat, expr)
+
 
 -- Parse a pattern (0, x, _)
 pattern :: Parser Pattern

@@ -5,22 +5,47 @@ import Parser (parseExpr)
 import Eval (eval)
 import System.Console.Haskeline
 import Text.Megaparsec (parse, errorBundlePretty)
+import System.Environment (getArgs)
+import System.IO (readFile)
+import Control.Monad.IO.Class (liftIO)
 
+-- Evaluate a string expression
+evalString :: String -> Either String Expr
+evalString input = case parse parseExpr "" input of
+  Right expr -> Right (eval expr)
+  Left err -> Left (errorBundlePretty err)
+
+-- Load and evaluate a file
+evalFile :: FilePath -> IO ()
+evalFile filePath = do
+  contents <- readFile filePath
+  case evalString contents of
+    Right result -> putStrLn $ "Result: " ++ show result
+    Left err -> putStrLn $ "Error: " ++ err
+
+-- Interactive REPL
 repl :: IO ()
 repl = runInputT defaultSettings loop
   where
     loop = do
-      input <- getInputLine "F↦> "  -- Changed from getInput to getInputLine
+      input <- getInputLine "F↦> "
       case input of
         Nothing -> return ()  -- Ctrl-D
         Just ":q" -> return ()  -- Quit
+        Just (':':'l':' ':filePath) -> do  -- Load file command
+          liftIO $ evalFile filePath
+          loop
         Just line -> do
-          case parse parseExpr "" line of
-            Right expr -> outputStrLn $ show (eval expr)
-            Left err -> outputStrLn $ "Error: " ++ errorBundlePretty err
+          case evalString line of
+            Right result -> outputStrLn $ show result
+            Left err -> outputStrLn $ "Error: " ++ err
           loop
 
 main :: IO ()
 main = do
-  putStrLn "F↦ v0.1 - Ctrl-D to quit"
-  repl
+  args <- getArgs
+  case args of
+    [filePath] -> evalFile filePath  -- Run a file if provided
+    _ -> do
+      putStrLn "F↦ v0.1 - Ctrl-D to quit, :l file to load a file"
+      repl
