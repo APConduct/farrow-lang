@@ -1,0 +1,8 @@
+-- Factorial function
+factorial := µ f |-> n -> 
+  case n of
+    0 => 1
+    _ => n * f (n - 1)
+
+-- Test it
+factorial 5  -- Should evaluate to 120

@@ -1,0 +1,8 @@
+-- Sum of a list
+sum_list := µ f |-> xs ->
+  case xs of
+    [] => 0
+    (h:t) => h + f t
+
+-- Example usage
+sum_list [1, 2, 3, 4, 5]  -- Should evaluate to 15

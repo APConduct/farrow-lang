@@ -1,0 +1,4 @@
+-- Simple addition
+x := 5
+y := 7
+x + y  -- Should evaluate to 12

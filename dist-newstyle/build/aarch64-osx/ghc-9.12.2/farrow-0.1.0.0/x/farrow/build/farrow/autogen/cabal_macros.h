@@ -20,6 +20,26 @@
   (major1) == 4 && (major2) <  21 || \
   (major1) == 4 && (major2) == 21 && (minor) <= 0)
 #endif /* MIN_VERSION_base */
+/* package containers-0.7 */
+#ifndef VERSION_containers
+#define VERSION_containers "0.7"
+#endif /* VERSION_containers */
+#ifndef MIN_VERSION_containers
+#define MIN_VERSION_containers(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  7 || \
+  (major1) == 0 && (major2) == 7 && (minor) <= 0)
+#endif /* MIN_VERSION_containers */
+/* package farrow-0.1.0.0 */
+#ifndef VERSION_farrow
+#define VERSION_farrow "0.1.0.0"
+#endif /* VERSION_farrow */
+#ifndef MIN_VERSION_farrow
+#define MIN_VERSION_farrow(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  1 || \
+  (major1) == 0 && (major2) == 1 && (minor) <= 0)
+#endif /* MIN_VERSION_farrow */
 /* package haskeline-0.8.2.1 */
 #ifndef VERSION_haskeline
 #define VERSION_haskeline "0.8.2.1"
