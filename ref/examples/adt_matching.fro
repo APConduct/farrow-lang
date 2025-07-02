@@ -1,0 +1,6 @@
+type Maybe a = Nothing | Just a -- PascalCase type
+
+safe_div : Int => Int => Maybe Int -- '=>' for type signature
+safe_div := x |-> y -> case y of
+    0 => Nothing    -- '=>' for pattern matching
+    _ => Just (x / y)

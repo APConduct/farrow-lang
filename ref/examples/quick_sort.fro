@@ -1,0 +1,4 @@
+sort : List Int => List Int
+sort := µ rec |-> xs -> case of
+    [] => []
+    p:ps => (rec <- filter (_ < p) <- ps) ++ [p] ++ (rec <- filter (_ >= p) <- ps)

@@ -1,0 +1,5 @@
+-- factorial function
+factorial := µ f |-> n ->
+    case n of
+        0 => 1
+        _ => n * f (n - 1);

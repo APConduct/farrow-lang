@@ -1,0 +1,5 @@
+map : (a => b) => List a => List b -- '=>' for types
+map := µ rec |-> f |-> xs ->
+    case xs of
+        [] => []
+        (Cons x xs) => Cons (f -> x) (rec -> f -> xs)
