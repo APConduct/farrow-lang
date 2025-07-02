@@ -20,6 +20,16 @@
   (major1) == 4 && (major2) <  21 || \
   (major1) == 4 && (major2) == 21 && (minor) <= 0)
 #endif /* MIN_VERSION_base */
+/* package haskeline-0.8.2.1 */
+#ifndef VERSION_haskeline
+#define VERSION_haskeline "0.8.2.1"
+#endif /* VERSION_haskeline */
+#ifndef MIN_VERSION_haskeline
+#define MIN_VERSION_haskeline(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  8 || \
+  (major1) == 0 && (major2) == 8 && (minor) <= 2)
+#endif /* MIN_VERSION_haskeline */
 /* package megaparsec-9.7.0 */
 #ifndef VERSION_megaparsec
 #define VERSION_megaparsec "9.7.0"

@@ -56,7 +56,7 @@ common warnings
 
 library
     hs-source-dirs:   src
-    exposed-modules: AST, Parser
+    exposed-modules: AST, Parser, Eval
     build-depends:  base >=4.16,
                     megaparsec >=9.6,
                     parser-combinators >=1.3.0
@@ -81,7 +81,8 @@ executable farrow
     build-depends:    base ^>=4.21.0.0,
                       megaparsec >=9.6.1 && <10.0,
                       parser-combinators >=1.3.0,
-                      text >=2.0 && <2.2
+                      text >=2.0 && <2.2,
+                      haskeline >=0.8.2
 
     -- Directories containing source files.
     hs-source-dirs:   src
