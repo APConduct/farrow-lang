@@ -1,0 +1,44 @@
+[package]
+name = "farrow"
+version = "0.1.0"
+edition = "2021"
+authors = ["Perry <aidanpj18@gmail.com>"]
+description = "F↦ programming language interpreter and compiler"
+license = "Apache-2.0"
+repository = "https://github.com/username/farrow"
+
+[dependencies]
+# Lexing
+logos = "0.14"
+
+# Parsing
+chumsky = "0.9"
+
+# CLI and REPL
+clap = { version = "4.4", features = ["derive"] }
+rustyline = "13.0"
+
+# Error handling and utilities
+thiserror = "1.0"
+ariadne = "0.4"   # Beautiful error reporting
+
+# Future compilation (commented out for now)
+# cranelift = "0.102"
+# cranelift-module = "0.102"
+# cranelift-jit = "0.102"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[[bin]]
+name = "farrow"
+path = "src/main.rs"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

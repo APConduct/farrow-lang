@@ -1,11 +1,11 @@
 unc_sort : List Int => List Int
 unc_sort := µ rec |-> xs -> case of
     [] => []
-    p:ps => (rec <- filter (_ < p) <- ps) ++ [p] ++ (rec <- filter (_ >= p) <- ps)
+    p:ps => (rec <- filter (_ < p) <- ps) <> [p] <> (rec <- filter (_ >= p) <- ps)
 
 sort : List Int => List Int
 sort := µ rec |-> xs ->
-    case cs of 
+    case cs of
         Nil => Nil
         (Cons p ps) =>
             (ps -> filter (x |-> x < p) -> rec)
