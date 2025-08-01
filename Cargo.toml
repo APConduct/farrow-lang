@@ -19,6 +19,10 @@ logos = "0.14"
 thiserror = "1.0"
 ariadne = "0.4"   # Beautiful error reporting
 
+# Future dependencies for enhanced features
+# clap = { version = "4.4", features = ["derive"] }  # Will re-enable CLI later
+# rustyline = "13.0"  # Will re-enable REPL later
+
 # Future compilation (commented out for now)
 # cranelift = "0.102"
 # cranelift-module = "0.102"
