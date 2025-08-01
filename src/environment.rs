@@ -25,6 +25,10 @@ pub enum Value {
     },
     BuiltinFunction(String),
     BuiltinFunction2(String, Box<Value>), // For curried built-ins
+    Constructor {
+        constructor: String,
+        fields: Vec<Value>,
+    },
 }
 
 impl Value {
@@ -41,6 +45,7 @@ impl Value {
             Value::RecFunction { .. } => "recursive function",
             Value::BuiltinFunction(_) => "builtin function",
             Value::BuiltinFunction2(..) => "builtin function",
+            Value::Constructor { .. } => "constructor",
         }
     }
 
@@ -93,6 +98,20 @@ impl std::fmt::Display for Value {
             }
             Value::BuiltinFunction(name) => write!(f, "<builtin {}>", name),
             Value::BuiltinFunction2(name, _) => write!(f, "<builtin {} (partial)>", name),
+            Value::Constructor {
+                constructor,
+                fields,
+            } => {
+                if fields.is_empty() {
+                    write!(f, "{}", constructor)
+                } else {
+                    write!(f, "({}", constructor)?;
+                    for field in fields {
+                        write!(f, " {}", field)?;
+                    }
+                    write!(f, ")")
+                }
+            }
         }
     }
 }

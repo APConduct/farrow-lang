@@ -1,6 +1,7 @@
 use crate::ast::{BinOp, Expr, Literal, Pattern, SpannedExpr, SpannedPattern, UnaryOp};
 use crate::environment::{CallFrame, CallStack, Environment, Value};
 use crate::error::{RuntimeError, RuntimeResult};
+use std::collections::HashMap;
 
 const MAX_RECURSION_DEPTH: usize = 1000;
 
@@ -483,12 +484,36 @@ impl Evaluator {
                 }
                 Ok(Some(bindings))
             }
-            (Pattern::Constructor { name, args: _ }, _) => {
-                // For future ADT support
-                Err(RuntimeError::custom(&format!(
-                    "Constructor patterns not yet implemented: {}",
-                    name
-                )))
+            (
+                Pattern::Constructor { name, args },
+                Value::Constructor {
+                    constructor,
+                    fields,
+                },
+            ) => {
+                // Match constructor name
+                if name != constructor {
+                    return Ok(None);
+                }
+
+                // Match arity
+                if args.len() != fields.len() {
+                    return Ok(None);
+                }
+
+                // Match all arguments
+                let mut bindings = Vec::new();
+                for (pat, val) in args.iter().zip(fields.iter()) {
+                    match self.match_pattern(pat, val)? {
+                        Some(mut pat_bindings) => bindings.append(&mut pat_bindings),
+                        None => return Ok(None),
+                    }
+                }
+                Ok(Some(bindings))
+            }
+            (Pattern::Constructor { name, args }, _) => {
+                // Constructor pattern doesn't match non-constructor value
+                Ok(None)
             }
             _ => Ok(None),
         }
@@ -734,6 +759,15 @@ impl Evaluator {
             // Utility functions
             "identity" => Ok(arg),
 
+            // ADT constructor functions
+            name if self.is_constructor_name(name) => {
+                // Single-argument constructor
+                Ok(Value::Constructor {
+                    constructor: name.to_string(),
+                    fields: vec![arg],
+                })
+            }
+
             _ => Err(RuntimeError::builtin_error(
                 name,
                 &format!("Unknown built-in function: {}", name),
@@ -904,16 +938,33 @@ impl Evaluator {
                     _ => Err(RuntimeError::invalid_application(arg1.type_name())),
                 }
             }
-            _ => Err(RuntimeError::builtin_error(
-                name,
-                &format!("Unknown two-argument built-in function: {}", name),
-            )),
+            _ => {
+                // Check if this is a multi-argument constructor
+                if self.is_constructor_name(name) {
+                    Ok(Value::Constructor {
+                        constructor: name.to_string(),
+                        fields: vec![arg1.clone(), arg2],
+                    })
+                } else {
+                    Err(RuntimeError::builtin_error(
+                        name,
+                        &format!("Unknown two-argument built-in function: {}", name),
+                    ))
+                }
+            }
         }
     }
 
     /// Get the current call stack (for debugging)
     pub fn call_stack(&self) -> &CallStack {
         &self.call_stack
+    }
+
+    /// Check if a name is a constructor (starts with uppercase)
+    fn is_constructor_name(&self, name: &str) -> bool {
+        name.chars()
+            .next()
+            .map_or(false, |c| c.is_ascii_uppercase())
     }
 }
 

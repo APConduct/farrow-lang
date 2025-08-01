@@ -1,0 +1,305 @@
+-- Algebraic Data Types Examples
+-- Demonstrates the use of ADTs in Farrow
+
+-- ===========================================
+-- BASIC ADT DEFINITIONS AND USAGE
+-- ===========================================
+
+-- Simple ADT: Maybe type for optional values
+-- Note: In a full implementation, these would be defined with 'type' keyword
+-- For now, we use constructors directly
+
+-- Creating Maybe values
+nothing_value := Nothing
+some_value := Just 42
+another_some := Just "hello"
+
+-- Pattern matching on Maybe
+process_maybe := maybe_val |-> case maybe_val of
+  Nothing => "no value"
+  Just x => "value: " + to_string x
+
+-- Test Maybe pattern matching
+test_nothing := process_maybe Nothing
+test_some := process_maybe (Just 42)
+
+-- ===========================================
+-- RESULT TYPE FOR ERROR HANDLING
+-- ===========================================
+
+-- Result type for computations that might fail
+safe_divide := x |-> y |-> case y of
+  0 => Error "Division by zero"
+  _ => Ok (x / y)
+
+-- Pattern matching on Result
+handle_result := result |-> case result of
+  Ok value => "Success: " + to_string value
+  Error msg => "Error: " + msg
+
+-- Test Result type
+division_success := handle_result (safe_divide 10 2)
+division_error := handle_result (safe_divide 10 0)
+
+-- ===========================================
+-- LIST TYPE (RECURSIVE ADT)
+-- ===========================================
+
+-- Custom list implementation using ADTs
+-- Nil represents empty list, Cons represents head:tail
+
+-- Creating lists with constructors
+empty_list := Nil
+single_item := Cons 1 Nil
+multiple_items := Cons 1 (Cons 2 (Cons 3 Nil))
+
+-- List length function using pattern matching
+list_length := μlen |-> (lst |-> case lst of
+  Nil => 0
+  Cons h t => 1 + len t)
+
+-- List sum function
+list_sum := μsum |-> (lst |-> case lst of
+  Nil => 0
+  Cons h t => h + sum t)
+
+-- List map function
+list_map := μmap |-> (f |-> (lst |-> case lst of
+  Nil => Nil
+  Cons h t => Cons (f h) (map f t)))
+
+-- Test custom list functions
+test_length := list_length multiple_items
+test_sum := list_sum multiple_items
+test_mapped := list_map (x |-> x * 2) multiple_items
+
+-- ===========================================
+-- TREE DATA STRUCTURE
+-- ===========================================
+
+-- Binary tree ADT
+empty_tree := Leaf
+simple_tree := Node 5 Leaf Leaf
+complex_tree := Node 10
+  (Node 5 Leaf Leaf)
+  (Node 15
+    (Node 12 Leaf Leaf)
+    (Node 20 Leaf Leaf))
+
+-- Tree depth calculation
+tree_depth := μdepth |-> (tree |-> case tree of
+  Leaf => 0
+  Node value left right => 1 + max (depth left) (depth right))
+
+-- Tree sum calculation
+tree_sum := μsum |-> (tree |-> case tree of
+  Leaf => 0
+  Node value left right => value + sum left + sum right)
+
+-- In-order traversal
+tree_inorder := μinorder |-> (tree |-> case tree of
+  Leaf => Nil
+  Node value left right =>
+    concat (concat (inorder left) (Cons value Nil)) (inorder right))
+
+-- Test tree functions
+test_tree_depth := tree_depth complex_tree
+test_tree_sum := tree_sum complex_tree
+test_tree_traversal := tree_inorder complex_tree
+
+-- ===========================================
+-- OPTION CHAINING AND COMBINATORS
+-- ===========================================
+
+-- Option bind (flatMap) operation
+option_bind := μbind |-> (maybe_val |-> (f |-> case maybe_val of
+  Nothing => Nothing
+  Just x => f x))
+
+-- Option map operation
+option_map := f |-> (maybe_val |-> case maybe_val of
+  Nothing => Nothing
+  Just x => Just (f x))
+
+-- Chain multiple Maybe operations
+safe_sqrt := x |-> case x >= 0 of
+  true => Just (sqrt x)
+  false => Nothing
+
+safe_reciprocal := x |-> case x == 0 of
+  true => Nothing
+  false => Just (1.0 / x)
+
+-- Chaining operations that might fail
+chained_computation := x |->
+  option_bind (safe_sqrt x) (y |->
+    option_bind (safe_reciprocal y) (z |->
+      Just (z * 100)))
+
+-- Test option chaining
+test_chain_success := chained_computation 4   -- Should work
+test_chain_fail := chained_computation (-1)   -- Should fail
+
+-- ===========================================
+-- STATE MACHINE USING ADTS
+-- ===========================================
+
+-- Traffic light state machine
+red_light := Red
+yellow_light := Yellow
+green_light := Green
+
+-- State transition function
+next_light := current |-> case current of
+  Red => Green
+  Green => Yellow
+  Yellow => Red
+
+-- Get light duration
+light_duration := light |-> case light of
+  Red => 30
+  Yellow => 5
+  Green => 25
+
+-- Simulate traffic light sequence
+light_sequence := μseq |-> (light |-> (steps |-> case steps of
+  0 => Nil
+  _ => Cons light (seq (next_light light) (steps - 1))))
+
+-- Test traffic light simulation
+traffic_simulation := light_sequence Red 6
+
+-- ===========================================
+-- EXPRESSION EVALUATOR USING ADTS
+-- ===========================================
+
+-- Simple arithmetic expression ADT
+num_expr := Num 42
+add_expr := Add (Num 10) (Num 32)
+mul_expr := Mul (Num 6) (Num 7)
+complex_expr := Add (Mul (Num 3) (Num 4)) (Num 5)
+
+-- Expression evaluator
+eval_expr := μeval |-> (expr |-> case expr of
+  Num n => n
+  Add left right => eval left + eval right
+  Mul left right => eval left * eval right
+  Sub left right => eval left - eval right)
+
+-- Test expression evaluation
+test_num := eval_expr num_expr
+test_add := eval_expr add_expr
+test_mul := eval_expr mul_expr
+test_complex := eval_expr complex_expr
+
+-- ===========================================
+-- JSON-LIKE DATA STRUCTURE
+-- ===========================================
+
+-- JSON value representation
+json_null := JsonNull
+json_bool := JsonBool true
+json_number := JsonNumber 42
+json_string := JsonString "hello"
+json_array := JsonArray (Cons json_number (Cons json_string Nil))
+
+-- JSON object (simplified - would need map/dictionary in full implementation)
+person_json := JsonObject
+  (Cons (Pair "name" (JsonString "Alice"))
+    (Cons (Pair "age" (JsonNumber 30))
+      (Cons (Pair "active" (JsonBool true)) Nil)))
+
+-- JSON pretty printer
+json_to_string := μjson_str |-> (json |-> case json of
+  JsonNull => "null"
+  JsonBool b => case b of true => "true"; false => "false"
+  JsonNumber n => to_string n
+  JsonString s => "\"" + s + "\""
+  JsonArray items => "[" + array_to_string items + "]"
+  JsonObject pairs => "{" + object_to_string pairs + "}")
+
+-- Helper functions would be needed for full implementation
+-- array_to_string and object_to_string
+
+-- Test JSON representation
+test_json_simple := json_to_string json_number
+test_json_bool := json_to_string json_bool
+
+-- ===========================================
+-- ADT BENEFITS DEMONSTRATION
+-- ===========================================
+
+-- ADTs provide:
+-- 1. Type safety - impossible to create invalid states
+-- 2. Exhaustive pattern matching - compiler ensures all cases handled
+-- 3. Immutability - functional data structures
+-- 4. Composability - ADTs can be nested and combined
+-- 5. Self-documenting - structure describes the data
+
+-- Example: Safe array indexing
+safe_get := μget |-> (index |-> (array |->
+  case index < 0 || index >= length array of
+    true => Nothing
+    false => Just (array !! index)))  -- hypothetical indexing operator
+
+-- Example: Parsing result
+parse_int := str |-> case to_int str of
+  result => case int? result of
+    true => Ok result
+    false => Error ("Cannot parse: " + str)
+
+-- Chain parsing operations
+parse_and_double := str |-> case parse_int str of
+  Ok n => Ok (n * 2)
+  Error msg => Error msg
+
+-- Test parsing
+test_parse_success := parse_and_double "42"
+test_parse_failure := parse_and_double "not_a_number"
+
+-- ===========================================
+-- RECURSIVE DATA PROCESSING
+-- ===========================================
+
+-- Nested list processing
+nested_list := Cons
+  (Cons 1 (Cons 2 Nil))
+  (Cons
+    (Cons 3 (Cons 4 Nil))
+    (Cons
+      (Cons 5 Nil)
+      Nil))
+
+-- Flatten nested structure
+flatten_lists := μflatten |-> (nested |-> case nested of
+  Nil => Nil
+  Cons head tail => case head of
+    Nil => flatten tail
+    Cons h t => Cons h (flatten (Cons t tail)))
+
+-- Test nested processing
+test_flatten := flatten_lists nested_list
+
+-- ===========================================
+-- SUMMARY
+-- ===========================================
+
+-- This file demonstrates:
+-- ✅ Maybe/Option types for null safety
+-- ✅ Result types for error handling
+-- ✅ Recursive data structures (Lists, Trees)
+-- ✅ State machines with ADTs
+-- ✅ Expression evaluation using ADTs
+-- ✅ JSON-like data representation
+-- ✅ Safe operations with pattern matching
+-- ✅ Nested data structure processing
+
+-- ADTs are the foundation for:
+-- - Domain modeling
+-- - Safe error handling
+-- - Recursive algorithms
+-- - Parser combinators
+-- - State machines
+-- - Functional data structures
+
+"ADT examples completed successfully!"
