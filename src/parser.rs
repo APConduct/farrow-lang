@@ -211,10 +211,10 @@ impl Parser {
     }
 
     fn pipe(&mut self) -> Result<SpannedExpr, String> {
-        let mut expr = self.application()?;
+        let mut expr = self.unary()?;
 
         while self.match_token(&Token::Pipe) {
-            let rhs = self.application()?;
+            let rhs = self.unary()?;
             expr = self.spanned(Expr::BinOp {
                 op: BinOp::Pipe,
                 lhs: Box::new(expr),
@@ -441,6 +441,39 @@ impl Parser {
             return Err("Expected ']' after list elements".to_string());
         }
 
+        if self.match_token(&Token::LeftBrace) {
+            let mut expressions = Vec::new();
+
+            // Handle empty block
+            if self.match_token(&Token::RightBrace) {
+                return Ok(self.spanned(Expr::Block(expressions)));
+            }
+
+            // Parse expressions separated by semicolons
+            loop {
+                expressions.push(self.parse_expression()?);
+
+                // Check for semicolon or end of block
+                if self.match_token(&Token::Semicolon) {
+                    // Continue parsing more expressions
+                    if self.check(&Token::RightBrace) {
+                        // Semicolon before closing brace is allowed
+                        break;
+                    }
+                } else if self.check(&Token::RightBrace) {
+                    // No semicolon before closing brace - last expression
+                    break;
+                } else {
+                    return Err("Expected ';' or '}' after expression in block".to_string());
+                }
+            }
+
+            if self.match_token(&Token::RightBrace) {
+                return Ok(self.spanned(Expr::Block(expressions)));
+            }
+            return Err("Expected '}' after block expressions".to_string());
+        }
+
         Err(format!("Unexpected token: {:?}", self.peek()))
     }
 
@@ -477,6 +510,26 @@ impl Parser {
                 | Token::Minus
                 | Token::Not
         )
+    }
+
+    fn unary(&mut self) -> Result<SpannedExpr, String> {
+        if self.match_token(&Token::Minus) {
+            let operand = self.unary()?;
+            return Ok(self.spanned(Expr::UnaryOp {
+                op: crate::ast::UnaryOp::Neg,
+                operand: Box::new(operand),
+            }));
+        }
+
+        if self.match_token(&Token::Not) {
+            let operand = self.unary()?;
+            return Ok(self.spanned(Expr::UnaryOp {
+                op: crate::ast::UnaryOp::Not,
+                operand: Box::new(operand),
+            }));
+        }
+
+        self.application()
     }
 
     fn parse_pattern(&mut self) -> Result<SpannedPattern, String> {

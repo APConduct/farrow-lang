@@ -30,6 +30,11 @@ impl Repl {
 
             let mut input = String::new();
             match io::stdin().read_line(&mut input) {
+                Ok(0) => {
+                    // EOF reached (Ctrl+D or piped input ended)
+                    println!("\nGoodbye! 👋");
+                    break;
+                }
                 Ok(_) => {
                     let input = input.trim();
 

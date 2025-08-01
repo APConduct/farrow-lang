@@ -30,9 +30,15 @@ fn main() {
 
     match args.len() {
         1 => {
-            // No arguments - start REPL
-            let mut repl = Repl::new();
-            repl.run();
+            // Check if we have input from stdin (pipe or redirect)
+            if atty::is(atty::Stream::Stdin) {
+                // Interactive mode - start REPL
+                let mut repl = Repl::new();
+                repl.run();
+            } else {
+                // Non-interactive mode - read from stdin
+                read_from_stdin();
+            }
         }
         2 => match args[1].as_str() {
             "repl" => {
@@ -44,6 +50,10 @@ fn main() {
             }
             "--help" | "-h" => {
                 show_help();
+            }
+            "--" => {
+                // Explicit stdin mode
+                read_from_stdin();
             }
             filename => {
                 // Try to execute file
@@ -62,14 +72,56 @@ fn main() {
     }
 }
 
+fn read_from_stdin() {
+    use std::io::Read;
+
+    let mut input = String::new();
+    match std::io::stdin().read_to_string(&mut input) {
+        Ok(_) => {
+            if !input.trim().is_empty() {
+                match parse_expr_from_str(&input) {
+                    Ok(expr) => {
+                        let mut evaluator = Evaluator::new();
+                        let env = Environment::global();
+
+                        match evaluator.eval(&env, &expr) {
+                            Ok(value) => {
+                                println!("{}", value);
+                            }
+                            Err(error) => {
+                                reporting::print_error(&error.into(), "stdin", &input);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    Err(parse_error) => {
+                        println!("Parse error: {}", parse_error);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        Err(error) => {
+            println!("Error reading from stdin: {}", error);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn show_help() {
     println!("Farrow Programming Language");
     println!("Usage:");
-    println!("  farrow               - Start REPL");
+    println!("  farrow               - Start REPL (or read from stdin if piped)");
     println!("  farrow repl          - Start REPL");
     println!("  farrow test          - Run test suite");
     println!("  farrow <filename>    - Execute Farrow file");
+    println!("  farrow --            - Read expression from stdin");
     println!("  farrow --help        - Show this help");
+    println!();
+    println!("Examples:");
+    println!("  farrow                    # Interactive REPL");
+    println!("  echo '1 + 2' | farrow     # Evaluate from pipe");
+    println!("  farrow examples/basic.fro # Run file");
 }
 
 fn run_file(filename: &str) {

@@ -402,16 +402,19 @@ impl Evaluator {
             return Ok(Value::Unit);
         }
 
-        let mut result = Value::Unit;
         let block_env = env.extend();
+        let mut result = Value::Unit;
 
-        for expr in exprs {
+        for (i, expr) in exprs.iter().enumerate() {
             result = self.eval_expr(&block_env, expr)?;
 
-            // If it's a let binding, add to block environment
-            if let Expr::Let { name, value, .. } = &expr.node {
-                let val = self.eval_expr(&block_env, value)?;
-                block_env.define(name.clone(), val);
+            // For let expressions that aren't the last in the block,
+            // add their bindings to the block environment
+            if i < exprs.len() - 1 {
+                if let Expr::Let { name, value, .. } = &expr.node {
+                    let val = self.eval_expr(&block_env, value)?;
+                    block_env.define(name.clone(), val);
+                }
             }
         }
 

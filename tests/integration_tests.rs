@@ -271,4 +271,84 @@ mod tests {
         assert_eq!(eval_string("false && (1 / 0 > 0)").unwrap(), "false");
         assert_eq!(eval_string("true || (1 / 0 > 0)").unwrap(), "true");
     }
+
+    #[test]
+    fn test_block_expressions() {
+        // Empty block
+        assert_eq!(eval_string("{}").unwrap(), "()");
+
+        // Single expression block
+        assert_eq!(eval_string("{ 42 }").unwrap(), "42");
+
+        // Multiple expressions - returns last value
+        assert_eq!(eval_string("{ 1; 2; 3 }").unwrap(), "3");
+
+        // Block with semicolon after last expression
+        assert_eq!(eval_string("{ 1; 2; 3; }").unwrap(), "3");
+
+        // Block with let bindings
+        let block_with_let = "{ let x := 5 in let y := x * 2 in x + y }";
+        assert_eq!(eval_string(block_with_let).unwrap(), "15");
+
+        // Nested blocks
+        let nested = "{ let x := 5 in { let y := x * 2 in y + 3 } }";
+        assert_eq!(eval_string(nested).unwrap(), "13");
+
+        // Block as function argument
+        let block_arg = "(f |-> f 10) (x |-> { let y := 5 in x + y })";
+        assert_eq!(eval_string(block_arg).unwrap(), "15");
+
+        // Block with function definitions
+        let block_func = "{ let inc := x |-> x + 1 in inc 5 }";
+        assert_eq!(eval_string(block_func).unwrap(), "6");
+    }
+
+    #[test]
+    fn test_block_scoping() {
+        // Variables in blocks don't leak out
+        let scoped = r#"
+            let x := 10 in
+            let result := { let x := 5; x + 1 } in
+            x + result
+        "#;
+        assert_eq!(eval_string(scoped).unwrap(), "16");
+
+        // Block bindings are visible in later expressions
+        let sequential = "{ let x := 5 in let y := x * 2 in let z := y + 3 in z }";
+        assert_eq!(eval_string(sequential).unwrap(), "13");
+
+        // Shadowing in blocks
+        let shadowing = r#"
+            let x := 1 in
+            { let x := 2; { let x := 3; x } + x } + x
+        "#;
+        assert_eq!(eval_string(shadowing).unwrap(), "6"); // 3 + 2 + 1
+    }
+
+    #[test]
+    fn test_block_with_pattern_matching() {
+        let block_case = r#"
+            {
+                let xs := [1, 2, 3] in
+                case xs of
+                    [] => 0,
+                    h : t => h + length t
+            }
+        "#;
+        assert_eq!(eval_string(block_case).unwrap(), "3");
+    }
+
+    #[test]
+    fn test_block_with_recursive_functions() {
+        let block_recursive = r#"
+            {
+                let factorial := μf |-> (n |->
+                    case n of
+                        0 => 1,
+                        _ => n * f (n - 1)) in
+                factorial 4
+            }
+        "#;
+        assert_eq!(eval_string(block_recursive).unwrap(), "24");
+    }
 }

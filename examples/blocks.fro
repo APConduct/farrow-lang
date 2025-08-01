@@ -1,0 +1,228 @@
+-- Block Expressions Examples
+-- Demonstrates the use of block expressions in Farrow
+
+-- ===========================================
+-- BASIC BLOCK EXPRESSIONS
+-- ===========================================
+
+-- Empty block evaluates to unit
+empty_block := {}
+
+-- Single expression block
+single_expr := { 42 }
+
+-- Multiple expressions - returns the last value
+multiple_exprs := { 1; 2; 3; 42 }
+
+-- Block with trailing semicolon (allowed)
+trailing_semi := { 1; 2; 3; }
+
+-- ===========================================
+-- BLOCKS WITH LOCAL BINDINGS
+-- ===========================================
+
+-- Block with let bindings - creates local scope
+local_scope := {
+    let x := 10;
+    let y := 20;
+    x + y
+}
+
+-- Sequential let bindings where later bindings use earlier ones
+sequential_bindings := {
+    let base := 5;
+    let doubled := base * 2;
+    let final := doubled + 1;
+    final
+}
+
+-- Nested blocks with scoping
+nested_scoping := {
+    let outer := 100;
+    let inner_result := {
+        let inner := 50;
+        outer + inner
+    };
+    inner_result + outer
+}
+
+-- ===========================================
+-- BLOCKS WITH FUNCTIONS
+-- ===========================================
+
+-- Define and use functions within blocks
+function_block := {
+    let increment := x |-> x + 1;
+    let double := x |-> x * 2;
+    let compose := f |-> (g |-> (x |-> f (g x)));
+
+    let inc_then_double := compose double increment;
+    inc_then_double 5
+}
+
+-- Block with recursive functions
+recursive_block := {
+    let factorial := μf |-> (n |->
+        case n of
+            0 => 1,
+            1 => 1,
+            _ => n * f (n - 1));
+
+    let fibonacci := μf |-> (n |->
+        case n of
+            0 => 0,
+            1 => 1,
+            _ => f (n - 1) + f (n - 2));
+
+    [factorial 5, fibonacci 7]
+}
+
+-- ===========================================
+-- BLOCKS WITH PATTERN MATCHING
+-- ===========================================
+
+-- Complex pattern matching within blocks
+pattern_block := {
+    let process_list := xs |-> case xs of
+        [] => "empty"
+        h : [] => "single"
+        h : t => "multiple";
+
+    let test_lists := [[], [1], [1, 2, 3]];
+    let results := case test_lists of
+        [a, b, c] => [process_list a, process_list b, process_list c]
+        _ => ["error"];
+
+    results
+}
+
+-- ===========================================
+-- BLOCKS FOR COMPUTATION PIPELINES
+-- ===========================================
+
+-- Use blocks to create computation pipelines
+data_pipeline := {
+    let raw_data := [1, 2, 3, 4, 5];
+
+    let transform := x |-> x * 2;
+    let filter_even := x |-> x % 2 == 0;
+
+    -- Note: In a real implementation, we'd have map and filter built-ins
+    let doubled := case raw_data of
+        [a, b, c, d, e] => [transform a, transform b, transform c, transform d, transform e]
+        _ => [];
+
+    doubled
+}
+
+-- ===========================================
+-- BLOCKS AS FUNCTION ARGUMENTS
+-- ===========================================
+
+-- Higher-order function that takes a block-like computation
+apply_computation := f |-> f 10
+
+-- Using a block as an argument
+computation_result := apply_computation {
+    let x := 5;
+    let multiplier := 3;
+    y |-> y * multiplier + x
+}
+
+-- ===========================================
+-- BLOCKS FOR CONDITIONAL LOGIC
+-- ===========================================
+
+-- Complex conditional logic using blocks
+conditional_block := x |-> {
+    let is_positive := x > 0;
+    let is_even := x % 2 == 0;
+
+    case [is_positive, is_even] of
+        [true, true] => "positive and even"
+        [true, false] => "positive and odd"
+        [false, true] => "negative and even"
+        [false, false] => "negative and odd"
+}
+
+-- ===========================================
+-- BLOCKS WITH ERROR HANDLING PATTERNS
+-- ===========================================
+
+-- Safe division using blocks and pattern matching
+safe_divide := a |-> b |-> {
+    let is_zero := b == 0;
+    case is_zero of
+        true => "Error: Division by zero"
+        false => {
+            let result := a / b;
+            "Result: " + (case result of r => "computed")  -- String representation would be nice
+        }
+}
+
+-- ===========================================
+-- BLOCKS FOR STATE MANAGEMENT PATTERNS
+-- ===========================================
+
+-- Counter-like pattern using blocks and closures
+make_counter := {
+    let initial := 0;
+    increment |-> {
+        let new_value := initial + increment;
+        new_value
+    }
+}
+
+-- ===========================================
+-- COMPLEX NESTED BLOCK EXAMPLE
+-- ===========================================
+
+-- Demonstrates deep nesting and complex logic
+complex_example := {
+    let config := {
+        let debug := true;
+        let max_iterations := 10;
+        [debug, max_iterations]
+    };
+
+    let processor := data |-> {
+        let [debug_mode, max_iter] := config;
+
+        let process_item := item |-> {
+            let squared := item * item;
+            let incremented := squared + 1;
+            case debug_mode of
+                true => incremented
+                false => incremented
+        };
+
+        case data of
+            [] => []
+            h : t => [process_item h]  -- Would use map in real implementation
+    };
+
+    let test_data := [1, 2, 3];
+    processor test_data
+}
+
+-- ===========================================
+-- BLOCKS WITH VALIDATION PATTERNS
+-- ===========================================
+
+-- Input validation using blocks
+validate_and_process := input |-> {
+    let is_valid := input > 0 && input < 100;
+
+    case is_valid of
+        true => {
+            let processed := input * 2 + 1;
+            let final := case processed > 50 of
+                true => processed / 2
+                false => processed;
+            final
+        }
+        false => 0  -- Error value
+}
+
+-- Final result - test the validation
+validation_test := validate_and_process 25
