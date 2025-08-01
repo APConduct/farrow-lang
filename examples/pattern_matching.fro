@@ -1,0 +1,65 @@
+-- Pattern Matching and Recursion Examples
+
+-- Simple pattern matching on integers
+simple_case := case 42 of 42 => true
+
+-- Pattern matching with wildcards
+wildcard_case := case 99 of
+  1 => false
+  _ => true
+
+-- List pattern matching - extracting head
+list_head := case [1, 2, 3] of
+  h : t => h
+  [] => 0
+
+-- List pattern matching - checking empty list
+is_empty := case [] of
+  [] => true
+  _ => false
+
+-- Recursive function using μ (mu) operator
+-- Note: For now we use simpler syntax without nested arrows
+simple_recursion := μf |-> (x |->
+  case x of
+    0 => 1
+    _ => x)
+
+-- Lambda functions
+increment := x |-> x + 1
+double := x |-> x * 2
+
+-- Function application
+apply_increment := increment 5
+apply_double := double 3
+
+-- Cons operation to build lists
+build_list := 1 : 2 : [3, 4]
+
+-- Let expressions for local bindings
+local_binding := let x := 10 in x + 5
+
+-- Nested let expressions
+nested_lets := let x := 5 in
+  let y := x * 2 in
+    x + y
+
+-- Boolean operations
+bool_and := true && false
+bool_or := true || false
+
+-- Comparison operations
+greater_than := 10 > 5
+equality := 42 == 42
+
+-- Arithmetic with precedence
+arithmetic := 1 + 2 * 3 + 4
+
+-- String literals
+greeting := "Hello, Farrow!"
+
+-- Complex pattern matching example
+process_list := case [1, 2, 3] of
+  [] => 0
+  h : [] => h
+  h : t => h + 10

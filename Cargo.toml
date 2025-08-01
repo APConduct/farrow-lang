@@ -11,12 +11,9 @@ repository = "https://github.com/username/farrow"
 # Lexing
 logos = "0.14"
 
-# Parsing
-chumsky = "0.9"
-
 # CLI and REPL
-clap = { version = "4.4", features = ["derive"] }
-rustyline = "13.0"
+# clap = { version = "4.4", features = ["derive"] }  # Temporarily disabled due to linker issues
+# rustyline = "13.0"  # Temporarily disabled due to linker issues
 
 # Error handling and utilities
 thiserror = "1.0"

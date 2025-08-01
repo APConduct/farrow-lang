@@ -1,212 +1,510 @@
-use chumsky::prelude::*;
-
-use crate::ast::{BinOp, Expr, Literal, Span, Spanned, SpannedExpr};
+use crate::ast::{BinOp, Expr, Literal, Pattern, Span, Spanned, SpannedExpr, SpannedPattern};
 use crate::lexer::Token;
 
-type ParserError = Simple<Token>;
-
-// Helper function to create spanned expressions with dummy spans
-fn spanned<T>(node: T, _span: std::ops::Range<usize>) -> Spanned<T> {
-    Spanned::new(node, Span::new(0, 0))
+#[derive(Debug, Clone)]
+pub struct Parser {
+    tokens: Vec<Token>,
+    current: usize,
 }
 
-// Simple helper to create a spanned expression with dummy span
-fn dummy_spanned<T>(node: T) -> Spanned<T> {
-    Spanned::new(node, Span::new(0, 0))
-}
-
-// Parse literals
-fn literal() -> impl Parser<Token, Literal, Error = ParserError> + Clone {
-    select! {
-        Token::Integer(n) => Literal::Int(n),
-        Token::String(s) => Literal::String(s),
-        Token::True => Literal::Bool(true),
-        Token::False => Literal::Bool(false),
+impl Parser {
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, current: 0 }
     }
-}
 
-// Parse identifiers
-fn identifier() -> impl Parser<Token, String, Error = ParserError> + Clone {
-    select! {
-        Token::Identifier(name) => name,
+    fn is_at_end(&self) -> bool {
+        self.current >= self.tokens.len()
     }
-}
 
-// Parse expressions
-fn expr() -> impl Parser<Token, SpannedExpr, Error = ParserError> + Clone {
-    recursive(|expr| {
-        // Atomic expressions
-        let lit = literal().map(Expr::Lit).map(dummy_spanned);
+    fn peek(&self) -> &Token {
+        self.tokens.get(self.current).unwrap_or(&Token::Error)
+    }
 
-        let var = identifier().map(Expr::Var).map(dummy_spanned);
+    fn previous(&self) -> &Token {
+        &self.tokens[self.current - 1]
+    }
 
-        let list = expr
-            .clone()
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .delimited_by(just(Token::LeftBracket), just(Token::RightBracket))
-            .map(Expr::List)
-            .map(dummy_spanned);
+    fn advance(&mut self) -> &Token {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
+        self.previous()
+    }
 
-        let parens = expr
-            .clone()
-            .delimited_by(just(Token::LeftParen), just(Token::RightParen));
+    fn check(&self, token_type: &Token) -> bool {
+        if self.is_at_end() {
+            false
+        } else {
+            std::mem::discriminant(self.peek()) == std::mem::discriminant(token_type)
+        }
+    }
 
-        // Let expression: let x := value in body
-        let let_expr = just(Token::Let)
-            .ignore_then(identifier())
-            .then_ignore(just(Token::Assign))
-            .then(expr.clone())
-            .then_ignore(just(Token::In))
-            .then(expr.clone())
-            .map(|((name, value), body)| Expr::Let {
-                name,
-                value: Box::new(value),
-                body: Box::new(body),
-            })
-            .map(dummy_spanned);
+    fn match_token(&mut self, token_type: &Token) -> bool {
+        if self.check(token_type) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
 
-        // Lambda expression: λx -> body
-        let lambda = just(Token::Lambda)
-            .ignore_then(identifier())
-            .then_ignore(just(Token::Arrow))
-            .then(expr.clone())
-            .map(|(param, body)| Expr::Lambda {
-                param,
-                body: Box::new(body),
-            })
-            .map(dummy_spanned);
+    fn dummy_span() -> Span {
+        Span::new(0, 0)
+    }
 
-        // Atomic expressions (highest precedence)
-        let atom = choice((
-            lit, list, let_expr, lambda, parens,
-            var, // Variable should come last to avoid conflicts
-        ));
+    fn spanned<T>(node: T) -> Spanned<T> {
+        Spanned::new(node, Self::dummy_span())
+    }
 
-        // Function application (left-associative)
-        let application = atom
-            .clone()
-            .then(atom.clone().repeated())
-            .foldl(|func, arg| {
-                let span = Span::new(func.span.start, arg.span.end);
-                Spanned::new(
-                    Expr::Apply {
-                        func: Box::new(func),
-                        arg: Box::new(arg),
-                    },
-                    span,
-                )
+    pub fn parse_expression(&mut self) -> Result<SpannedExpr, String> {
+        self.logical_or()
+    }
+
+    fn logical_or(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.logical_and()?;
+
+        while self.match_token(&Token::Or) {
+            let rhs = self.logical_and()?;
+            expr = Self::spanned(Expr::BinOp {
+                op: BinOp::Or,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
             });
+        }
 
-        // Binary operations - simplified precedence
-        let additive = application
-            .clone()
-            .then(
-                choice((
-                    just(Token::Plus).to(BinOp::Add),
-                    just(Token::Minus).to(BinOp::Sub),
-                ))
-                .then(application.clone())
-                .repeated(),
+        Ok(expr)
+    }
+
+    fn logical_and(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(&Token::And) {
+            let rhs = self.equality()?;
+            expr = Self::spanned(Expr::BinOp {
+                op: BinOp::And,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn equality(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.comparison()?;
+
+        while matches!(self.peek(), Token::Equal | Token::NotEqual) {
+            let op = match self.advance() {
+                Token::Equal => BinOp::Eq,
+                Token::NotEqual => BinOp::Neq,
+                _ => unreachable!(),
+            };
+            let rhs = self.comparison()?;
+            expr = Self::spanned(Expr::BinOp {
+                op,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn comparison(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.term()?;
+
+        while matches!(
+            self.peek(),
+            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual
+        ) {
+            let op = match self.advance() {
+                Token::Greater => BinOp::Gt,
+                Token::GreaterEqual => BinOp::Ge,
+                Token::Less => BinOp::Lt,
+                Token::LessEqual => BinOp::Le,
+                _ => unreachable!(),
+            };
+            let rhs = self.term()?;
+            expr = Self::spanned(Expr::BinOp {
+                op,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn term(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.factor()?;
+
+        while matches!(self.peek(), Token::Minus | Token::Plus) {
+            let op = match self.advance() {
+                Token::Minus => BinOp::Sub,
+                Token::Plus => BinOp::Add,
+                _ => unreachable!(),
+            };
+            let rhs = self.factor()?;
+            expr = Self::spanned(Expr::BinOp {
+                op,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn factor(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.cons()?;
+
+        while matches!(self.peek(), Token::Slash | Token::Star | Token::Percent) {
+            let op = match self.advance() {
+                Token::Slash => BinOp::Div,
+                Token::Star => BinOp::Mul,
+                Token::Percent => BinOp::Mod,
+                _ => unreachable!(),
+            };
+            let rhs = self.cons()?;
+            expr = Self::spanned(Expr::BinOp {
+                op,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn cons(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.pipe()?;
+
+        if self.match_token(&Token::Cons) {
+            let tail = self.cons()?; // Right associative
+            expr = Self::spanned(Expr::Cons {
+                head: Box::new(expr),
+                tail: Box::new(tail),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn pipe(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.application()?;
+
+        while self.match_token(&Token::Pipe) {
+            let rhs = self.application()?;
+            expr = Self::spanned(Expr::BinOp {
+                op: BinOp::Pipe,
+                lhs: Box::new(expr),
+                rhs: Box::new(rhs),
+            });
+        }
+
+        Ok(expr)
+    }
+
+    fn application(&mut self) -> Result<SpannedExpr, String> {
+        let mut expr = self.primary()?;
+
+        while !self.is_at_end()
+            && !matches!(
+                self.peek(),
+                Token::RightParen
+                    | Token::RightBracket
+                    | Token::RightBrace
+                    | Token::Semicolon
+                    | Token::Comma
+                    | Token::Plus
+                    | Token::Minus
+                    | Token::Star
+                    | Token::Slash
+                    | Token::Percent
+                    | Token::Equal
+                    | Token::NotEqual
+                    | Token::Less
+                    | Token::LessEqual
+                    | Token::Greater
+                    | Token::GreaterEqual
+                    | Token::And
+                    | Token::Or
+                    | Token::Cons
+                    | Token::Pipe
+                    | Token::FatArrow
+                    | Token::In
+                    | Token::Then
+                    | Token::Else
+                    | Token::Of
             )
-            .foldl(|lhs, (op, rhs)| {
-                let span = Span::new(lhs.span.start, rhs.span.end);
-                Spanned::new(
-                    Expr::BinOp {
-                        op,
-                        lhs: Box::new(lhs),
-                        rhs: Box::new(rhs),
-                    },
-                    span,
-                )
+        {
+            let arg = self.primary()?;
+            expr = Self::spanned(Expr::Apply {
+                func: Box::new(expr),
+                arg: Box::new(arg),
             });
+        }
 
-        let multiplicative = additive
-            .clone()
-            .then(
-                choice((
-                    just(Token::Star).to(BinOp::Mul),
-                    just(Token::Slash).to(BinOp::Div),
-                ))
-                .then(additive.clone())
-                .repeated(),
-            )
-            .foldl(|lhs, (op, rhs)| {
-                let span = Span::new(lhs.span.start, rhs.span.end);
-                Spanned::new(
-                    Expr::BinOp {
-                        op,
-                        lhs: Box::new(lhs),
-                        rhs: Box::new(rhs),
-                    },
-                    span,
-                )
-            });
+        Ok(expr)
+    }
 
-        multiplicative
-    })
-}
+    fn primary(&mut self) -> Result<SpannedExpr, String> {
+        if let Token::Integer(n) = self.peek() {
+            let n = *n;
+            self.advance();
+            return Ok(Self::spanned(Expr::Lit(Literal::Int(n))));
+        }
 
-// Parse a single expression or declaration
-fn statement() -> impl Parser<Token, SpannedExpr, Error = ParserError> + Clone {
-    // Variable assignment: x := expr (treated as let x := expr in x)
-    let assignment = identifier()
-        .then_ignore(just(Token::Assign))
-        .then(expr())
-        .map(|(name, value)| {
-            let var_expr = Spanned::new(
-                Expr::Var(name.clone()),
-                Span::new(value.span.end, value.span.end),
-            );
-            Expr::Let {
-                name,
-                value: Box::new(value),
-                body: Box::new(var_expr),
+        if let Token::String(s) = self.peek() {
+            let s = s.clone();
+            self.advance();
+            return Ok(Self::spanned(Expr::Lit(Literal::String(s))));
+        }
+
+        if self.match_token(&Token::True) {
+            return Ok(Self::spanned(Expr::Lit(Literal::Bool(true))));
+        }
+
+        if self.match_token(&Token::False) {
+            return Ok(Self::spanned(Expr::Lit(Literal::Bool(false))));
+        }
+
+        if let Token::Identifier(name) = self.peek() {
+            let name = name.clone();
+            self.advance();
+
+            // Check for lambda: x |-> body
+            if self.match_token(&Token::LambdaArrow) {
+                let body = self.parse_expression()?;
+                return Ok(Self::spanned(Expr::Lambda {
+                    param: name,
+                    body: Box::new(body),
+                }));
             }
-        })
-        .map_with_span(spanned);
 
-    choice((assignment, expr()))
+            return Ok(Self::spanned(Expr::Var(name)));
+        }
+
+        if self.match_token(&Token::Lambda) {
+            if let Token::Identifier(param) = self.peek() {
+                let param = param.clone();
+                self.advance();
+                if self.match_token(&Token::Arrow) {
+                    let body = self.parse_expression()?;
+                    return Ok(Self::spanned(Expr::Lambda {
+                        param,
+                        body: Box::new(body),
+                    }));
+                }
+            }
+            return Err("Expected parameter name after λ".to_string());
+        }
+
+        if self.match_token(&Token::Mu) {
+            if let Token::Identifier(name) = self.peek() {
+                let name = name.clone();
+                self.advance();
+                if self.match_token(&Token::LambdaArrow) {
+                    let body = self.parse_expression()?;
+                    return Ok(Self::spanned(Expr::Mu {
+                        name,
+                        body: Box::new(body),
+                    }));
+                }
+            }
+            return Err("Expected function name after μ".to_string());
+        }
+
+        if self.match_token(&Token::Let) {
+            if let Token::Identifier(name) = self.peek() {
+                let name = name.clone();
+                self.advance();
+                if self.match_token(&Token::Assign) {
+                    let value = self.parse_expression()?;
+                    if self.match_token(&Token::In) {
+                        let body = self.parse_expression()?;
+                        return Ok(Self::spanned(Expr::Let {
+                            name,
+                            value: Box::new(value),
+                            body: Box::new(body),
+                        }));
+                    }
+                }
+            }
+            return Err("Invalid let expression".to_string());
+        }
+
+        if self.match_token(&Token::Case) {
+            let scrutinee = self.parse_expression()?;
+            if self.match_token(&Token::Of) {
+                let mut branches = Vec::new();
+
+                loop {
+                    let pattern = self.parse_pattern()?;
+                    if self.match_token(&Token::FatArrow) {
+                        let expr = self.parse_expression()?;
+                        branches.push((pattern, expr));
+
+                        if !self.match_token(&Token::Semicolon) {
+                            break;
+                        }
+                    } else {
+                        return Err("Expected '=>' after pattern".to_string());
+                    }
+                }
+
+                return Ok(Self::spanned(Expr::Case {
+                    scrutinee: Box::new(scrutinee),
+                    branches,
+                }));
+            }
+            return Err("Expected 'of' after case expression".to_string());
+        }
+
+        if self.match_token(&Token::If) {
+            let condition = self.parse_expression()?;
+            if self.match_token(&Token::Then) {
+                let then_branch = self.parse_expression()?;
+                if self.match_token(&Token::Else) {
+                    let else_branch = self.parse_expression()?;
+                    return Ok(Self::spanned(Expr::If {
+                        condition: Box::new(condition),
+                        then_branch: Box::new(then_branch),
+                        else_branch: Box::new(else_branch),
+                    }));
+                }
+            }
+            return Err("Invalid if expression".to_string());
+        }
+
+        if self.match_token(&Token::LeftParen) {
+            let expr = self.parse_expression()?;
+            if self.match_token(&Token::RightParen) {
+                return Ok(expr);
+            }
+            return Err("Expected ')' after expression".to_string());
+        }
+
+        if self.match_token(&Token::LeftBracket) {
+            let mut elements = Vec::new();
+
+            if !self.check(&Token::RightBracket) {
+                loop {
+                    elements.push(self.parse_expression()?);
+                    if !self.match_token(&Token::Comma) {
+                        break;
+                    }
+                }
+            }
+
+            if self.match_token(&Token::RightBracket) {
+                return Ok(Self::spanned(Expr::List(elements)));
+            }
+            return Err("Expected ']' after list elements".to_string());
+        }
+
+        Err(format!("Unexpected token: {:?}", self.peek()))
+    }
+
+    fn parse_pattern(&mut self) -> Result<SpannedPattern, String> {
+        if self.check(&Token::Wildcard) {
+            self.advance();
+            return Ok(Self::spanned(Pattern::Wild));
+        }
+
+        if let Token::Integer(n) = self.peek() {
+            let n = *n;
+            self.advance();
+            return Ok(Self::spanned(Pattern::Lit(Literal::Int(n))));
+        }
+
+        if let Token::String(s) = self.peek() {
+            let s = s.clone();
+            self.advance();
+            return Ok(Self::spanned(Pattern::Lit(Literal::String(s))));
+        }
+
+        if self.match_token(&Token::True) {
+            return Ok(Self::spanned(Pattern::Lit(Literal::Bool(true))));
+        }
+
+        if self.match_token(&Token::False) {
+            return Ok(Self::spanned(Pattern::Lit(Literal::Bool(false))));
+        }
+
+        if self.match_token(&Token::LeftBracket) {
+            let mut patterns = Vec::new();
+
+            if !self.check(&Token::RightBracket) {
+                loop {
+                    patterns.push(self.parse_pattern()?);
+                    if !self.match_token(&Token::Comma) {
+                        break;
+                    }
+                }
+            }
+
+            if self.match_token(&Token::RightBracket) {
+                return Ok(Self::spanned(Pattern::List(patterns)));
+            }
+            return Err("Expected ']' after list pattern".to_string());
+        }
+
+        if self.match_token(&Token::LeftParen) {
+            let pattern = self.parse_pattern()?;
+            if self.match_token(&Token::RightParen) {
+                return Ok(pattern);
+            }
+            return Err("Expected ')' after pattern".to_string());
+        }
+
+        if let Token::Identifier(name) = self.peek() {
+            let name = name.clone();
+            self.advance();
+
+            // Check for cons pattern: head : tail
+            if self.check(&Token::Cons) {
+                self.advance();
+                let tail = self.parse_pattern()?;
+                return Ok(Self::spanned(Pattern::Cons {
+                    head: Box::new(Self::spanned(Pattern::Var(name))),
+                    tail: Box::new(tail),
+                }));
+            }
+
+            // Check for constructor pattern: Name(args...)
+            if self.match_token(&Token::LeftParen) {
+                let mut args = Vec::new();
+
+                if !self.check(&Token::RightParen) {
+                    loop {
+                        args.push(self.parse_pattern()?);
+                        if !self.match_token(&Token::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                if self.match_token(&Token::RightParen) {
+                    return Ok(Self::spanned(Pattern::Constructor { name, args }));
+                }
+                return Err("Expected ')' after constructor arguments".to_string());
+            }
+
+            return Ok(Self::spanned(Pattern::Var(name)));
+        }
+
+        Err(format!("Unexpected token in pattern: {:?}", self.peek()))
+    }
 }
 
-// Parse a program (multiple statements)
-fn program() -> impl Parser<Token, Vec<SpannedExpr>, Error = ParserError> + Clone {
-    statement()
-        .separated_by(just(Token::Semicolon).or_not())
-        .allow_trailing()
-        .then_ignore(end())
-}
-
-// Public parsing functions
-pub fn parse_expression(
-    tokens: &[(Token, std::ops::Range<usize>)],
-) -> Result<SpannedExpr, Vec<ParserError>> {
-    let input: Vec<_> = tokens.iter().map(|(token, _)| token.clone()).collect();
-
-    expr().then_ignore(end()).parse(input.as_slice())
-}
-
-pub fn parse_program(
-    tokens: &[(Token, std::ops::Range<usize>)],
-) -> Result<Vec<SpannedExpr>, Vec<ParserError>> {
-    let input: Vec<_> = tokens.iter().map(|(token, _)| token.clone()).collect();
-
-    program().parse(input.as_slice())
-}
-
-// Convenience functions that handle tokenization
 pub fn parse_expr_from_str(input: &str) -> Result<SpannedExpr, String> {
     let tokens =
         crate::lexer::tokenize(input).map_err(|errors| format!("Lexer errors: {:?}", errors))?;
 
-    parse_expression(&tokens).map_err(|errors| format!("Parser errors: {:?}", errors))
-}
-
-pub fn parse_program_from_str(input: &str) -> Result<Vec<SpannedExpr>, String> {
-    let tokens =
-        crate::lexer::tokenize(input).map_err(|errors| format!("Lexer errors: {:?}", errors))?;
-
-    parse_program(&tokens).map_err(|errors| format!("Parser errors: {:?}", errors))
+    let token_vec: Vec<Token> = tokens.into_iter().map(|(token, _)| token).collect();
+    let mut parser = Parser::new(token_vec);
+    parser.parse_expression()
 }
 
 #[cfg(test)]
@@ -244,12 +542,44 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_assignment() {
-        let result = parse_expr_from_str("x := 42");
+    fn test_parse_lambda() {
+        let result = parse_expr_from_str("x |-> x + 1");
         assert!(result.is_ok());
         match result.unwrap().node {
-            Expr::Let { name, .. } if name == "x" => {}
-            _ => panic!("Expected let expression"),
+            Expr::Lambda { param, .. } if param == "x" => {}
+            _ => panic!("Expected lambda expression"),
+        }
+    }
+
+    #[test]
+    fn test_parse_mu() {
+        let result = parse_expr_from_str("μf |-> (n |-> n + 1)");
+        assert!(result.is_ok());
+        match result.unwrap().node {
+            Expr::Mu { name, .. } if name == "f" => {}
+            _ => panic!("Expected mu expression"),
+        }
+    }
+
+    #[test]
+    fn test_parse_case() {
+        let result = parse_expr_from_str("case x of 0 => 1; _ => 2");
+        assert!(result.is_ok());
+        match result.unwrap().node {
+            Expr::Case { branches, .. } => {
+                assert_eq!(branches.len(), 2);
+            }
+            _ => panic!("Expected case expression"),
+        }
+    }
+
+    #[test]
+    fn test_parse_cons() {
+        let result = parse_expr_from_str("1 : []");
+        assert!(result.is_ok());
+        match result.unwrap().node {
+            Expr::Cons { .. } => {}
+            _ => panic!("Expected cons expression"),
         }
     }
 }

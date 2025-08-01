@@ -1,8 +1,8 @@
--- Sum of a list
-sum_list := µ f |-> xs ->
+-- Sum of a list using pattern matching
+sum_list := μf |-> xs ->
   case xs of
     [] => 0
-    (h:t) => h + f t
+    h : t => h + (f t)
 
 -- Example usage
-sum_list [1, 2, 3, 4, 5]  -- Should evaluate to 15
+sum_list [1, 2, 3, 4, 5]

@@ -1,0 +1,65 @@
+-- Function Composition and Higher-Order Functions Examples
+
+-- Basic lambda functions
+add_one := x |-> x + 1
+multiply_by_two := x |-> x * 2
+square := x |-> x * x
+
+-- Function application
+result1 := add_one 5
+result2 := multiply_by_two 3
+result3 := square 4
+
+-- Nested function application (function composition)
+composed := add_one (multiply_by_two 3)
+
+-- Higher-order function that takes a function as argument
+apply_twice := f |-> (x |-> f (f x))
+
+-- Using apply_twice with our functions
+double_increment := apply_twice add_one
+quad_multiply := apply_twice multiply_by_two
+
+-- Test the higher-order functions
+test1 := double_increment 5    -- Should be 7 (5 + 1 + 1)
+test2 := quad_multiply 2       -- Should be 8 (2 * 2 * 2)
+
+-- Function that returns a function (currying)
+adder := x |-> (y |-> x + y)
+add_five := adder 5
+add_ten := adder 10
+
+-- Test curried functions
+curry_test1 := add_five 3      -- Should be 8
+curry_test2 := add_ten 7       -- Should be 17
+
+-- Conditional functions
+is_positive := x |-> case x > 0 of true => true; false => false
+abs_value := x |-> case x > 0 of true => x; false => 0 - x
+
+-- Function composition using pipe operator
+piped_result := 5 |> add_one |> multiply_by_two
+
+-- Complex function with pattern matching
+process_number := x |-> case x of
+  0 => "zero"
+  1 => "one"
+  _ => "many"
+
+-- List processing function
+list_processor := xs |-> case xs of
+  [] => 0
+  h : t => h
+
+-- Test list processing
+list_test := list_processor [42, 99, 123]
+
+-- Boolean functions
+not_func := x |-> case x of true => false; false => true
+and_func := x |-> (y |-> x && y)
+or_func := x |-> (y |-> x || y)
+
+-- Test boolean functions
+bool_test1 := not_func true
+bool_test2 := and_func true false
+bool_test3 := or_func false true
