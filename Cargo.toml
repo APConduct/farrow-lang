@@ -31,6 +31,10 @@ ariadne = "0.4"   # Beautiful error reporting
 [dev-dependencies]
 pretty_assertions = "1.4"
 
+[lib]
+name = "farrow"
+path = "src/lib.rs"
+
 [[bin]]
 name = "farrow"
 path = "src/main.rs"

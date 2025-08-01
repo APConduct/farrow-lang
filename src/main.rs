@@ -4,10 +4,17 @@ mod error;
 mod evaluator;
 mod lexer;
 mod parser;
+mod repl;
+mod reporting;
 
 use environment::{Environment, Value};
 use error::RuntimeResult;
 use evaluator::Evaluator;
+use parser::parse_expr_from_str;
+use repl::Repl;
+use std::env;
+use std::fs;
+use std::path::Path;
 
 fn eval_string(input: &str) -> RuntimeResult<Value> {
     let expr = parser::parse_expr_from_str(input).map_err(|e| error::RuntimeError::custom(&e))?;
@@ -19,6 +26,82 @@ fn eval_string(input: &str) -> RuntimeResult<Value> {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    match args.len() {
+        1 => {
+            // No arguments - start REPL
+            let mut repl = Repl::new();
+            repl.run();
+        }
+        2 => match args[1].as_str() {
+            "repl" => {
+                let mut repl = Repl::new();
+                repl.run();
+            }
+            "test" => {
+                run_tests();
+            }
+            "--help" | "-h" => {
+                show_help();
+            }
+            filename => {
+                // Try to execute file
+                if Path::new(filename).exists() {
+                    run_file(filename);
+                } else {
+                    println!("File not found: {}", filename);
+                    show_help();
+                }
+            }
+        },
+        _ => {
+            println!("Too many arguments");
+            show_help();
+        }
+    }
+}
+
+fn show_help() {
+    println!("Farrow Programming Language");
+    println!("Usage:");
+    println!("  farrow               - Start REPL");
+    println!("  farrow repl          - Start REPL");
+    println!("  farrow test          - Run test suite");
+    println!("  farrow <filename>    - Execute Farrow file");
+    println!("  farrow --help        - Show this help");
+}
+
+fn run_file(filename: &str) {
+    match fs::read_to_string(filename) {
+        Ok(content) => match parse_expr_from_str(&content) {
+            Ok(expr) => {
+                let mut evaluator = Evaluator::new();
+                let env = Environment::global();
+
+                match evaluator.eval(&env, &expr) {
+                    Ok(value) => {
+                        println!("{}", value);
+                    }
+                    Err(error) => {
+                        reporting::print_error(&error.into(), filename, &content);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Err(parse_error) => {
+                println!("Parse error in {}: {}", filename, parse_error);
+                std::process::exit(1);
+            }
+        },
+        Err(error) => {
+            println!("Error reading file {}: {}", filename, error);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_tests() {
     // Test basic expressions
     println!("🚀 Testing Farrow Language with Enhanced Error Handling");
     println!("{}", "=".repeat(60));

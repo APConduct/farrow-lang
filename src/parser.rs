@@ -3,12 +3,12 @@ use crate::lexer::Token;
 
 #[derive(Debug, Clone)]
 pub struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<(Token, std::ops::Range<usize>)>,
     current: usize,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<(Token, std::ops::Range<usize>)>) -> Self {
         Self { tokens, current: 0 }
     }
 
@@ -17,18 +17,38 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        self.tokens.get(self.current).unwrap_or(&Token::Error)
+        self.tokens
+            .get(self.current)
+            .map(|(token, _)| token)
+            .unwrap_or(&Token::Error)
     }
 
-    fn previous(&self) -> &Token {
+    fn previous(&self) -> &(Token, std::ops::Range<usize>) {
         &self.tokens[self.current - 1]
+    }
+
+    fn current_span(&self) -> Span {
+        if let Some((_, range)) = self.tokens.get(self.current) {
+            Span::new(range.start, range.end)
+        } else {
+            Span::new(0, 0)
+        }
+    }
+
+    fn previous_span(&self) -> Span {
+        if self.current > 0 {
+            let (_, range) = &self.tokens[self.current - 1];
+            Span::new(range.start, range.end)
+        } else {
+            Span::new(0, 0)
+        }
     }
 
     fn advance(&mut self) -> &Token {
         if !self.is_at_end() {
             self.current += 1;
         }
-        self.previous()
+        &self.previous().0
     }
 
     fn check(&self, token_type: &Token) -> bool {
@@ -48,12 +68,12 @@ impl Parser {
         }
     }
 
-    fn dummy_span() -> Span {
-        Span::new(0, 0)
+    fn spanned<T>(&self, node: T) -> Spanned<T> {
+        Spanned::new(node, self.previous_span())
     }
 
-    fn spanned<T>(node: T) -> Spanned<T> {
-        Spanned::new(node, Self::dummy_span())
+    fn spanned_at<T>(&self, node: T, start: usize, end: usize) -> Spanned<T> {
+        Spanned::new(node, Span::new(start, end))
     }
 
     pub fn parse_expression(&mut self) -> Result<SpannedExpr, String> {
@@ -65,7 +85,7 @@ impl Parser {
 
         while self.match_token(&Token::Or) {
             let rhs = self.logical_and()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op: BinOp::Or,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -80,7 +100,7 @@ impl Parser {
 
         while self.match_token(&Token::And) {
             let rhs = self.equality()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op: BinOp::And,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -100,7 +120,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let rhs = self.comparison()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -125,7 +145,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let rhs = self.term()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -145,7 +165,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let rhs = self.factor()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -166,7 +186,7 @@ impl Parser {
                 _ => unreachable!(),
             };
             let rhs = self.cons()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -181,7 +201,7 @@ impl Parser {
 
         if self.match_token(&Token::Cons) {
             let tail = self.cons()?; // Right associative
-            expr = Self::spanned(Expr::Cons {
+            expr = self.spanned(Expr::Cons {
                 head: Box::new(expr),
                 tail: Box::new(tail),
             });
@@ -195,7 +215,7 @@ impl Parser {
 
         while self.match_token(&Token::Pipe) {
             let rhs = self.application()?;
-            expr = Self::spanned(Expr::BinOp {
+            expr = self.spanned(Expr::BinOp {
                 op: BinOp::Pipe,
                 lhs: Box::new(expr),
                 rhs: Box::new(rhs),
@@ -236,10 +256,12 @@ impl Parser {
                     | Token::Then
                     | Token::Else
                     | Token::Of
+                    | Token::Wildcard // Don't consume wildcard patterns as function arguments
             )
+            && self.can_start_primary()
         {
             let arg = self.primary()?;
-            expr = Self::spanned(Expr::Apply {
+            expr = self.spanned(Expr::Apply {
                 func: Box::new(expr),
                 arg: Box::new(arg),
             });
@@ -252,21 +274,21 @@ impl Parser {
         if let Token::Integer(n) = self.peek() {
             let n = *n;
             self.advance();
-            return Ok(Self::spanned(Expr::Lit(Literal::Int(n))));
+            return Ok(self.spanned(Expr::Lit(Literal::Int(n))));
         }
 
         if let Token::String(s) = self.peek() {
             let s = s.clone();
             self.advance();
-            return Ok(Self::spanned(Expr::Lit(Literal::String(s))));
+            return Ok(self.spanned(Expr::Lit(Literal::String(s))));
         }
 
         if self.match_token(&Token::True) {
-            return Ok(Self::spanned(Expr::Lit(Literal::Bool(true))));
+            return Ok(self.spanned(Expr::Lit(Literal::Bool(true))));
         }
 
         if self.match_token(&Token::False) {
-            return Ok(Self::spanned(Expr::Lit(Literal::Bool(false))));
+            return Ok(self.spanned(Expr::Lit(Literal::Bool(false))));
         }
 
         if let Token::Identifier(name) = self.peek() {
@@ -276,13 +298,13 @@ impl Parser {
             // Check for lambda: x |-> body
             if self.match_token(&Token::LambdaArrow) {
                 let body = self.parse_expression()?;
-                return Ok(Self::spanned(Expr::Lambda {
+                return Ok(self.spanned(Expr::Lambda {
                     param: name,
                     body: Box::new(body),
                 }));
             }
 
-            return Ok(Self::spanned(Expr::Var(name)));
+            return Ok(self.spanned(Expr::Var(name)));
         }
 
         if self.match_token(&Token::Lambda) {
@@ -291,7 +313,7 @@ impl Parser {
                 self.advance();
                 if self.match_token(&Token::Arrow) {
                     let body = self.parse_expression()?;
-                    return Ok(Self::spanned(Expr::Lambda {
+                    return Ok(self.spanned(Expr::Lambda {
                         param,
                         body: Box::new(body),
                     }));
@@ -306,7 +328,7 @@ impl Parser {
                 self.advance();
                 if self.match_token(&Token::LambdaArrow) {
                     let body = self.parse_expression()?;
-                    return Ok(Self::spanned(Expr::Mu {
+                    return Ok(self.spanned(Expr::Mu {
                         name,
                         body: Box::new(body),
                     }));
@@ -323,7 +345,7 @@ impl Parser {
                     let value = self.parse_expression()?;
                     if self.match_token(&Token::In) {
                         let body = self.parse_expression()?;
-                        return Ok(Self::spanned(Expr::Let {
+                        return Ok(self.spanned(Expr::Let {
                             name,
                             value: Box::new(value),
                             body: Box::new(body),
@@ -340,12 +362,23 @@ impl Parser {
                 let mut branches = Vec::new();
 
                 loop {
+                    // Check if we've reached the end of the case expression
+                    if self.is_at_end()
+                        || self.check(&Token::RightParen)
+                        || self.check(&Token::In)
+                        || self.check(&Token::Then)
+                        || self.check(&Token::Else)
+                    {
+                        break;
+                    }
+
                     let pattern = self.parse_pattern()?;
                     if self.match_token(&Token::FatArrow) {
                         let expr = self.parse_expression()?;
                         branches.push((pattern, expr));
 
-                        if !self.match_token(&Token::Semicolon) {
+                        // Check for comma delimiter
+                        if !self.match_token(&Token::Comma) {
                             break;
                         }
                     } else {
@@ -353,7 +386,7 @@ impl Parser {
                     }
                 }
 
-                return Ok(Self::spanned(Expr::Case {
+                return Ok(self.spanned(Expr::Case {
                     scrutinee: Box::new(scrutinee),
                     branches,
                 }));
@@ -367,7 +400,7 @@ impl Parser {
                 let then_branch = self.parse_expression()?;
                 if self.match_token(&Token::Else) {
                     let else_branch = self.parse_expression()?;
-                    return Ok(Self::spanned(Expr::If {
+                    return Ok(self.spanned(Expr::If {
                         condition: Box::new(condition),
                         then_branch: Box::new(then_branch),
                         else_branch: Box::new(else_branch),
@@ -378,6 +411,11 @@ impl Parser {
         }
 
         if self.match_token(&Token::LeftParen) {
+            // Check for unit literal ()
+            if self.match_token(&Token::RightParen) {
+                return Ok(self.spanned(Expr::Lit(Literal::Unit)));
+            }
+
             let expr = self.parse_expression()?;
             if self.match_token(&Token::RightParen) {
                 return Ok(expr);
@@ -398,7 +436,7 @@ impl Parser {
             }
 
             if self.match_token(&Token::RightBracket) {
-                return Ok(Self::spanned(Expr::List(elements)));
+                return Ok(self.spanned(Expr::List(elements)));
             }
             return Err("Expected ']' after list elements".to_string());
         }
@@ -406,30 +444,65 @@ impl Parser {
         Err(format!("Unexpected token: {:?}", self.peek()))
     }
 
+    fn can_start_pattern(&self) -> bool {
+        matches!(
+            self.peek(),
+            Token::Wildcard
+                | Token::Integer(_)
+                | Token::String(_)
+                | Token::True
+                | Token::False
+                | Token::LeftBracket
+                | Token::LeftParen
+                | Token::Identifier(_)
+        )
+    }
+
+    fn can_start_primary(&self) -> bool {
+        matches!(
+            self.peek(),
+            Token::Integer(_)
+                | Token::String(_)
+                | Token::True
+                | Token::False
+                | Token::Identifier(_)
+                | Token::Lambda
+                | Token::Mu
+                | Token::Let
+                | Token::Case
+                | Token::If
+                | Token::LeftParen
+                | Token::LeftBracket
+                | Token::LeftBrace
+                | Token::Minus
+                | Token::Not
+        )
+    }
+
     fn parse_pattern(&mut self) -> Result<SpannedPattern, String> {
         if self.check(&Token::Wildcard) {
             self.advance();
-            return Ok(Self::spanned(Pattern::Wild));
+            return Ok(self.spanned(Pattern::Wild));
         }
 
         if let Token::Integer(n) = self.peek() {
             let n = *n;
             self.advance();
-            return Ok(Self::spanned(Pattern::Lit(Literal::Int(n))));
+            return Ok(self.spanned(Pattern::Lit(Literal::Int(n))));
         }
 
         if let Token::String(s) = self.peek() {
             let s = s.clone();
             self.advance();
-            return Ok(Self::spanned(Pattern::Lit(Literal::String(s))));
+            return Ok(self.spanned(Pattern::Lit(Literal::String(s))));
         }
 
         if self.match_token(&Token::True) {
-            return Ok(Self::spanned(Pattern::Lit(Literal::Bool(true))));
+            return Ok(self.spanned(Pattern::Lit(Literal::Bool(true))));
         }
 
         if self.match_token(&Token::False) {
-            return Ok(Self::spanned(Pattern::Lit(Literal::Bool(false))));
+            return Ok(self.spanned(Pattern::Lit(Literal::Bool(false))));
         }
 
         if self.match_token(&Token::LeftBracket) {
@@ -445,7 +518,7 @@ impl Parser {
             }
 
             if self.match_token(&Token::RightBracket) {
-                return Ok(Self::spanned(Pattern::List(patterns)));
+                return Ok(self.spanned(Pattern::List(patterns)));
             }
             return Err("Expected ']' after list pattern".to_string());
         }
@@ -466,8 +539,8 @@ impl Parser {
             if self.check(&Token::Cons) {
                 self.advance();
                 let tail = self.parse_pattern()?;
-                return Ok(Self::spanned(Pattern::Cons {
-                    head: Box::new(Self::spanned(Pattern::Var(name))),
+                return Ok(self.spanned(Pattern::Cons {
+                    head: Box::new(self.spanned(Pattern::Var(name))),
                     tail: Box::new(tail),
                 }));
             }
@@ -486,12 +559,12 @@ impl Parser {
                 }
 
                 if self.match_token(&Token::RightParen) {
-                    return Ok(Self::spanned(Pattern::Constructor { name, args }));
+                    return Ok(self.spanned(Pattern::Constructor { name, args }));
                 }
                 return Err("Expected ')' after constructor arguments".to_string());
             }
 
-            return Ok(Self::spanned(Pattern::Var(name)));
+            return Ok(self.spanned(Pattern::Var(name)));
         }
 
         Err(format!("Unexpected token in pattern: {:?}", self.peek()))
@@ -502,8 +575,7 @@ pub fn parse_expr_from_str(input: &str) -> Result<SpannedExpr, String> {
     let tokens =
         crate::lexer::tokenize(input).map_err(|errors| format!("Lexer errors: {:?}", errors))?;
 
-    let token_vec: Vec<Token> = tokens.into_iter().map(|(token, _)| token).collect();
-    let mut parser = Parser::new(token_vec);
+    let mut parser = Parser::new(tokens);
     parser.parse_expression()
 }
 
@@ -563,7 +635,7 @@ mod tests {
 
     #[test]
     fn test_parse_case() {
-        let result = parse_expr_from_str("case x of 0 => 1; _ => 2");
+        let result = parse_expr_from_str("case x of 0 => 1, _ => 2");
         assert!(result.is_ok());
         match result.unwrap().node {
             Expr::Case { branches, .. } => {
