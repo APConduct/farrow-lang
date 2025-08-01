@@ -97,7 +97,7 @@ lambaExpr :: Parser Expr
 lambaExpr = do
   _ <- symbol "λ" <|> symbol "\\"  -- Allow both λ and \
   var <- lexeme (some letterChar)
-  _ <- symbol "->"
+  _ <- symbol "|->"
   body <- parseExpr
   return $ Lamba var body
 
@@ -106,7 +106,7 @@ muExpr :: Parser Expr
 muExpr = do
   _ <- symbol "µ"
   f <- lexeme (some letterChar)
-  _ <- symbol "->"
+  _ <- symbol "|->"
   body <- parseExpr
   return $ Mu f body
 

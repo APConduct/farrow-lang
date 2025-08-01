@@ -1,0 +1,10 @@
+filter : (a => Bool) => List a => List a
+filter := µ rec |-> f |-> xs ->
+    case xs of 
+        Nil => Nil
+        (Cons x xs) =>
+            case f -> x of
+                True => Cons x (rec -> f -> xs)
+                False => rec -> f -> xs
+
+-- Usage (Cons 1 (Cons 2 Nil)) -> filter (x |-> x > 1)
