@@ -10,7 +10,7 @@ mod reporting;
 use environment::{Environment, Value};
 use error::RuntimeResult;
 use evaluator::Evaluator;
-use parser::parse_expr_from_str;
+use parser::{parse_expr_from_str, parse_module_from_str};
 use repl::Repl;
 use std::env;
 use std::fs;
@@ -79,23 +79,41 @@ fn read_from_stdin() {
     match std::io::stdin().read_to_string(&mut input) {
         Ok(_) => {
             if !input.trim().is_empty() {
-                match parse_expr_from_str(&input) {
-                    Ok(expr) => {
-                        let mut evaluator = Evaluator::new();
-                        let env = Environment::global();
-
-                        match evaluator.eval(&env, &expr) {
-                            Ok(value) => {
-                                println!("{}", value);
-                            }
-                            Err(error) => {
-                                reporting::print_error(&error.into(), "stdin", &input);
-                                std::process::exit(1);
-                            }
+                // Try parsing as module first, then fall back to expression
+                let result = if input.contains("type ") || input.contains("data ") {
+                    // Looks like it contains type definitions, parse as module
+                    match parse_module_from_str(&input) {
+                        Ok(module) => {
+                            let mut evaluator = Evaluator::new();
+                            let env = Environment::global();
+                            evaluator.eval_module(&env, &module)
+                        }
+                        Err(parse_error) => {
+                            println!("Parse error: {}", parse_error);
+                            std::process::exit(1);
                         }
                     }
-                    Err(parse_error) => {
-                        println!("Parse error: {}", parse_error);
+                } else {
+                    // Parse as expression
+                    match parse_expr_from_str(&input) {
+                        Ok(expr) => {
+                            let mut evaluator = Evaluator::new();
+                            let env = Environment::global();
+                            evaluator.eval(&env, &expr)
+                        }
+                        Err(parse_error) => {
+                            println!("Parse error: {}", parse_error);
+                            std::process::exit(1);
+                        }
+                    }
+                };
+
+                match result {
+                    Ok(value) => {
+                        println!("{}", value);
+                    }
+                    Err(error) => {
+                        reporting::print_error(&error.into(), "stdin", &input);
                         std::process::exit(1);
                     }
                 }
@@ -126,26 +144,46 @@ fn show_help() {
 
 fn run_file(filename: &str) {
     match fs::read_to_string(filename) {
-        Ok(content) => match parse_expr_from_str(&content) {
-            Ok(expr) => {
-                let mut evaluator = Evaluator::new();
-                let env = Environment::global();
-
-                match evaluator.eval(&env, &expr) {
-                    Ok(value) => {
-                        println!("{}", value);
+        Ok(content) => {
+            // Try parsing as module first, then fall back to expression
+            let result = if content.contains("type ") || content.contains("data ") {
+                // Looks like it contains type definitions, parse as module
+                match parse_module_from_str(&content) {
+                    Ok(module) => {
+                        let mut evaluator = Evaluator::new();
+                        let env = Environment::global();
+                        evaluator.eval_module(&env, &module)
                     }
-                    Err(error) => {
-                        reporting::print_error(&error.into(), filename, &content);
+                    Err(parse_error) => {
+                        println!("Parse error in {}: {}", filename, parse_error);
                         std::process::exit(1);
                     }
                 }
+            } else {
+                // Parse as expression
+                match parse_expr_from_str(&content) {
+                    Ok(expr) => {
+                        let mut evaluator = Evaluator::new();
+                        let env = Environment::global();
+                        evaluator.eval(&env, &expr)
+                    }
+                    Err(parse_error) => {
+                        println!("Parse error in {}: {}", filename, parse_error);
+                        std::process::exit(1);
+                    }
+                }
+            };
+
+            match result {
+                Ok(value) => {
+                    println!("{}", value);
+                }
+                Err(error) => {
+                    reporting::print_error(&error.into(), filename, &content);
+                    std::process::exit(1);
+                }
             }
-            Err(parse_error) => {
-                println!("Parse error in {}: {}", filename, parse_error);
-                std::process::exit(1);
-            }
-        },
+        }
         Err(error) => {
             println!("Error reading file {}: {}", filename, error);
             std::process::exit(1);

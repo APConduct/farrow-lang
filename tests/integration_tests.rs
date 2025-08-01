@@ -500,4 +500,235 @@ mod tests {
         assert!(eval_string("to_float \"invalid\"").is_err()); // Invalid conversion
         assert!(eval_string("sqrt (-1)").is_ok()); // Should return NaN but not error
     }
+
+    #[test]
+    fn test_basic_adt_constructors() {
+        // Test built-in ADT constructors
+        assert_eq!(eval_string("Nothing").unwrap(), "Nothing");
+        assert_eq!(eval_string("Just 42").unwrap(), "(Just 42)");
+        assert_eq!(eval_string("Ok 100").unwrap(), "(Ok 100)");
+        assert_eq!(eval_string("Error \"fail\"").unwrap(), "(Error \"fail\")");
+    }
+
+    #[test]
+    fn test_maybe_pattern_matching() {
+        // Test Maybe pattern matching
+        let check_maybe = r#"
+            let check := val |-> case val of
+                Nothing => "empty",
+                Just x => "value: " + to_string x
+            in check
+        "#;
+
+        assert_eq!(
+            eval_string(&format!("({}) Nothing", check_maybe)).unwrap(),
+            "\"empty\""
+        );
+        assert_eq!(
+            eval_string(&format!("({}) (Just 42)", check_maybe)).unwrap(),
+            "\"value: 42\""
+        );
+    }
+
+    #[test]
+    fn test_result_pattern_matching() {
+        // Test Result pattern matching
+        let check_result = r#"
+            let check := val |-> case val of
+                Ok x => "success: " + to_string x,
+                Error msg => "error: " + msg
+            in check
+        "#;
+
+        assert_eq!(
+            eval_string(&format!("({}) (Ok 100)", check_result)).unwrap(),
+            "\"success: 100\""
+        );
+        assert_eq!(
+            eval_string(&format!("({}) (Error \"fail\")", check_result)).unwrap(),
+            "\"error: fail\""
+        );
+    }
+
+    #[test]
+    fn test_nested_constructor_patterns() {
+        // Test nested pattern matching with constructors
+        let nested_test = r#"
+            let process := val |-> case val of
+                Just (Ok x) => "success: " + to_string x,
+                Just (Error msg) => "nested error: " + msg,
+                Nothing => "no value"
+            in process
+        "#;
+
+        assert_eq!(
+            eval_string(&format!("({}) (Just (Ok 42))", nested_test)).unwrap(),
+            "\"success: 42\""
+        );
+        assert_eq!(
+            eval_string(&format!("({}) (Just (Error \"bad\"))", nested_test)).unwrap(),
+            "\"nested error: bad\""
+        );
+        assert_eq!(
+            eval_string(&format!("({}) Nothing", nested_test)).unwrap(),
+            "\"no value\""
+        );
+    }
+
+    #[test]
+    fn test_list_constructors() {
+        // Test List ADT constructors (Nil and Cons)
+        assert_eq!(eval_string("Nil").unwrap(), "Nil");
+        assert_eq!(eval_string("Cons 1 Nil").unwrap(), "(Cons 1 Nil)");
+        assert_eq!(
+            eval_string("Cons 1 (Cons 2 Nil)").unwrap(),
+            "(Cons 1 (Cons 2 Nil))"
+        );
+    }
+
+    #[test]
+    fn test_list_pattern_matching() {
+        // Test pattern matching on List constructors
+        let list_length = r#"
+            let len := μcount |-> lst |-> case lst of
+                Nil => 0,
+                Cons h t => 1 + count t
+            in len
+        "#;
+
+        assert_eq!(eval_string(&format!("({}) Nil", list_length)).unwrap(), "0");
+        assert_eq!(
+            eval_string(&format!("({}) (Cons 1 Nil)", list_length)).unwrap(),
+            "1"
+        );
+        assert_eq!(
+            eval_string(&format!("({}) (Cons 1 (Cons 2 Nil))", list_length)).unwrap(),
+            "2"
+        );
+    }
+
+    #[test]
+    fn test_safe_operations_with_maybe() {
+        // Test safe operations that return Maybe
+        let safe_div = r#"
+            let safe_divide := x |-> y |-> case y of
+                0 => Nothing,
+                _ => Just (x / y)
+            in safe_divide
+        "#;
+
+        let extract_maybe = r#"
+            let extract := val |-> case val of
+                Nothing => -1,
+                Just x => x
+            in extract
+        "#;
+
+        assert_eq!(
+            eval_string(&format!("({}) (({}) 10 2)", extract_maybe, safe_div)).unwrap(),
+            "5"
+        );
+        assert_eq!(
+            eval_string(&format!("({}) (({}) 10 0)", extract_maybe, safe_div)).unwrap(),
+            "-1"
+        );
+    }
+
+    #[test]
+    fn test_result_chaining() {
+        // Test Result type for error chaining
+        let chain_ops = r#"
+            let safe_sqrt := x |-> case x >= 0 of
+                true => Ok (sqrt x),
+                false => Error "negative input"
+            in
+            let safe_div := x |-> y |-> case y of
+                0 => Error "division by zero",
+                _ => Ok (x / y)
+            in
+            let process := x |-> case safe_sqrt x of
+                Error msg => Error msg,
+                Ok root => safe_div 100 root
+            in process
+        "#;
+
+        let extract_result = r#"
+            let extract := val |-> case val of
+                Ok x => x,
+                Error msg => -999
+            in extract
+        "#;
+
+        // Test successful case: sqrt(25) = 5, 100/5 = 20
+        assert_eq!(
+            eval_string(&format!("({}) (({}) 25)", extract_result, chain_ops)).unwrap(),
+            "20"
+        );
+
+        // Test error case: sqrt(-4) should fail
+        assert_eq!(
+            eval_string(&format!("({}) (({}) (-4))", extract_result, chain_ops)).unwrap(),
+            "-999"
+        );
+    }
+
+    #[test]
+    fn test_constructor_arity() {
+        // Test that constructors work with correct arity
+        assert_eq!(eval_string("Just 42").unwrap(), "(Just 42)");
+        assert_eq!(eval_string("Cons 1 Nil").unwrap(), "(Cons 1 Nil)");
+
+        // Test that wrong arity produces errors
+        assert!(eval_string("Nothing 42").is_err()); // Nothing takes 0 args
+    }
+
+    #[test]
+    fn test_adt_with_functions() {
+        // Test ADTs used with higher-order functions
+        let map_maybe = r#"
+            let map_maybe := f |-> maybe_val |-> case maybe_val of
+                Nothing => Nothing,
+                Just x => Just (f x)
+            in map_maybe
+        "#;
+
+        let double = "x |-> x * 2";
+
+        assert_eq!(
+            eval_string(&format!("({}) ({}) (Just 21)", map_maybe, double)).unwrap(),
+            "(Just 42)"
+        );
+        assert_eq!(
+            eval_string(&format!("({}) ({}) Nothing", map_maybe, double)).unwrap(),
+            "Nothing"
+        );
+    }
+
+    #[test]
+    fn test_recursive_adt_operations() {
+        // Test recursive operations on ADTs
+        let list_sum = r#"
+            let sum := μadd |-> lst |-> case lst of
+                Nil => 0,
+                Cons h t => h + add t
+            in sum"#;
+
+        let list_map = r#"
+            let map := μmapper |-> f |-> lst |-> case lst of
+                Nil => Nil,
+                Cons h t => Cons (f h) (mapper f t)
+            in map"#;
+
+        let test_list = "Cons 1 (Cons 2 (Cons 3 Nil))";
+        let double_func = "x |-> x * 2";
+
+        assert_eq!(
+            eval_string(&format!("{} ({})", list_sum, test_list)).unwrap(),
+            "6"
+        );
+        assert_eq!(
+            eval_string(&format!("{} ({}) ({})", list_map, double_func, test_list)).unwrap(),
+            "(Cons 2 (Cons 4 (Cons 6 Nil)))"
+        );
+    }
 }

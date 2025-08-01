@@ -1,0 +1,58 @@
+-- ADT Demonstration for Farrow
+-- Shows working algebraic data types with pattern matching
+
+-- Test basic constructors
+nothing_val := Nothing
+just_val := Just 42
+ok_val := Ok 100
+error_val := Error "oops"
+
+-- Pattern matching functions
+check_maybe := val |-> case val of
+  Nothing => "no value"
+  Just x => "value: " + to_string x
+
+check_result := val |-> case val of
+  Ok x => "success: " + to_string x
+  Error msg => "error: " + msg
+
+-- Safe division using Maybe
+safe_divide := x |-> y |-> case y of
+  0 => Nothing
+  _ => Just (x / y)
+
+-- Chain Maybe operations
+maybe_double := val |-> case val of
+  Nothing => Nothing
+  Just x => Just (x * 2)
+
+-- Test all the functions
+test1 := check_maybe nothing_val           -- "no value"
+test2 := check_maybe just_val              -- "value: 42"
+test3 := check_result ok_val               -- "success: 100"
+test4 := check_result error_val            -- "error: oops"
+
+test5 := check_maybe (safe_divide 10 2)    -- "value: 5"
+test6 := check_maybe (safe_divide 10 0)    -- "no value"
+
+test7 := check_maybe (maybe_double (Just 21))  -- "value: 42"
+test8 := check_maybe (maybe_double Nothing)    -- "no value"
+
+-- List constructors (built-in ADT)
+my_list := Cons 1 (Cons 2 (Cons 3 Nil))
+empty_list := Nil
+
+list_length := μlen |-> lst |-> case lst of
+  Nil => 0
+  Cons h t => 1 + len t
+
+list_sum := μsum |-> lst |-> case lst of
+  Nil => 0
+  Cons h t => h + sum t
+
+test9 := list_length my_list               -- 3
+test10 := list_sum my_list                 -- 6
+test11 := list_length empty_list           -- 0
+
+-- Final result showing ADTs work!
+"ADT demonstration completed successfully!"

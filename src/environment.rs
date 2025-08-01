@@ -116,10 +116,27 @@ impl std::fmt::Display for Value {
     }
 }
 
+/// ADT type definition
+#[derive(Debug, Clone, PartialEq)]
+pub struct AdtDefinition {
+    pub name: String,
+    pub type_params: Vec<String>,
+    pub constructors: Vec<ConstructorDefinition>,
+}
+
+/// Constructor definition within an ADT
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstructorDefinition {
+    pub name: String,
+    pub field_types: Vec<crate::ast::Type>,
+    pub arity: usize,
+}
+
 /// Environment for variable bindings with lexical scoping
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
     bindings: Rc<RefCell<HashMap<String, Value>>>,
+    types: Rc<RefCell<HashMap<String, AdtDefinition>>>,
     parent: Option<Rc<Environment>>,
 }
 
@@ -128,6 +145,7 @@ impl Environment {
     pub fn new() -> Self {
         Environment {
             bindings: Rc::new(RefCell::new(HashMap::new())),
+            types: Rc::new(RefCell::new(HashMap::new())),
             parent: None,
         }
     }
@@ -136,6 +154,7 @@ impl Environment {
     pub fn with_parent(parent: Environment) -> Self {
         Environment {
             bindings: Rc::new(RefCell::new(HashMap::new())),
+            types: Rc::new(RefCell::new(HashMap::new())),
             parent: Some(Rc::new(parent)),
         }
     }
@@ -144,6 +163,7 @@ impl Environment {
     pub fn extend(&self) -> Environment {
         Environment {
             bindings: Rc::new(RefCell::new(HashMap::new())),
+            types: Rc::new(RefCell::new(HashMap::new())),
             parent: Some(Rc::new(self.clone())),
         }
     }
@@ -151,6 +171,11 @@ impl Environment {
     /// Define a new binding in this environment
     pub fn define(&self, name: String, value: Value) {
         self.bindings.borrow_mut().insert(name, value);
+    }
+
+    /// Define a new ADT type in this environment
+    pub fn define_type(&self, name: String, adt: AdtDefinition) {
+        self.types.borrow_mut().insert(name, adt);
     }
 
     /// Look up a variable in this environment or its parents
@@ -166,6 +191,55 @@ impl Environment {
         }
 
         Err(RuntimeError::unbound_variable(name.to_string()))
+    }
+
+    /// Look up a type definition in this environment or its parents
+    pub fn lookup_type(&self, name: &str) -> Option<AdtDefinition> {
+        // Check current environment
+        if let Some(adt) = self.types.borrow().get(name) {
+            return Some(adt.clone());
+        }
+
+        // Check parent environments
+        if let Some(parent) = &self.parent {
+            return parent.lookup_type(name);
+        }
+
+        None
+    }
+
+    /// Check if a name is a known constructor
+    pub fn is_constructor(&self, name: &str) -> bool {
+        // Check all types for a constructor with this name
+        for adt in self.types.borrow().values() {
+            if adt.constructors.iter().any(|c| c.name == name) {
+                return true;
+            }
+        }
+
+        // Check parent environments
+        if let Some(parent) = &self.parent {
+            return parent.is_constructor(name);
+        }
+
+        false
+    }
+
+    /// Get constructor definition by name
+    pub fn get_constructor(&self, name: &str) -> Option<ConstructorDefinition> {
+        // Check all types for a constructor with this name
+        for adt in self.types.borrow().values() {
+            if let Some(constructor) = adt.constructors.iter().find(|c| c.name == name) {
+                return Some(constructor.clone());
+            }
+        }
+
+        // Check parent environments
+        if let Some(parent) = &self.parent {
+            return parent.get_constructor(name);
+        }
+
+        None
     }
 
     /// Update an existing binding (for mutation, if we add it later)
@@ -206,6 +280,9 @@ impl Environment {
     /// Create a global environment with standard library functions
     pub fn global() -> Self {
         let env = Environment::new();
+
+        // Define built-in ADTs
+        env.define_builtin_types();
 
         // I/O functions
         env.define(
@@ -458,6 +535,101 @@ impl Environment {
         );
 
         env
+    }
+
+    /// Define built-in ADT types
+    fn define_builtin_types(&self) {
+        // Maybe type
+        let maybe_adt = AdtDefinition {
+            name: "Maybe".to_string(),
+            type_params: vec!["a".to_string()],
+            constructors: vec![
+                ConstructorDefinition {
+                    name: "Nothing".to_string(),
+                    field_types: vec![],
+                    arity: 0,
+                },
+                ConstructorDefinition {
+                    name: "Just".to_string(),
+                    field_types: vec![crate::ast::Type::Var("a".to_string())],
+                    arity: 1,
+                },
+            ],
+        };
+        self.define_type("Maybe".to_string(), maybe_adt);
+
+        // Result type
+        let result_adt = AdtDefinition {
+            name: "Result".to_string(),
+            type_params: vec!["a".to_string(), "b".to_string()],
+            constructors: vec![
+                ConstructorDefinition {
+                    name: "Ok".to_string(),
+                    field_types: vec![crate::ast::Type::Var("a".to_string())],
+                    arity: 1,
+                },
+                ConstructorDefinition {
+                    name: "Error".to_string(),
+                    field_types: vec![crate::ast::Type::Var("b".to_string())],
+                    arity: 1,
+                },
+            ],
+        };
+        self.define_type("Result".to_string(), result_adt);
+
+        // List type
+        let list_adt = AdtDefinition {
+            name: "List".to_string(),
+            type_params: vec!["a".to_string()],
+            constructors: vec![
+                ConstructorDefinition {
+                    name: "Nil".to_string(),
+                    field_types: vec![],
+                    arity: 0,
+                },
+                ConstructorDefinition {
+                    name: "Cons".to_string(),
+                    field_types: vec![
+                        crate::ast::Type::Var("a".to_string()),
+                        crate::ast::Type::App {
+                            constructor: Box::new(crate::ast::Type::Named("List".to_string())),
+                            args: vec![crate::ast::Type::Var("a".to_string())],
+                        },
+                    ],
+                    arity: 2,
+                },
+            ],
+        };
+        self.define_type("List".to_string(), list_adt);
+
+        // Add constructor functions to environment
+        self.define(
+            "Nothing".to_string(),
+            Value::Constructor {
+                constructor: "Nothing".to_string(),
+                fields: vec![],
+            },
+        );
+        self.define(
+            "Just".to_string(),
+            Value::BuiltinFunction("Just".to_string()),
+        );
+        self.define("Ok".to_string(), Value::BuiltinFunction("Ok".to_string()));
+        self.define(
+            "Error".to_string(),
+            Value::BuiltinFunction("Error".to_string()),
+        );
+        self.define(
+            "Nil".to_string(),
+            Value::Constructor {
+                constructor: "Nil".to_string(),
+                fields: vec![],
+            },
+        );
+        self.define(
+            "Cons".to_string(),
+            Value::BuiltinFunction("Cons".to_string()),
+        );
     }
 }
 

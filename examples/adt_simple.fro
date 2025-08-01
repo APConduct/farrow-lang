@@ -1,0 +1,54 @@
+-- Simple ADT Test - Basic constructor and pattern matching
+
+-- Test Nothing constructor
+Nothing
+
+-- Test Just constructor
+Just 42
+
+-- Test pattern matching on Nothing
+case Nothing of
+  Nothing => "empty"
+  Just x => "value"
+
+-- Test pattern matching on Just
+case Just 42 of
+  Nothing => "empty"
+  Just x => x
+
+-- Test Ok constructor
+Ok 100
+
+-- Test Error constructor
+Error "failed"
+
+-- Test Result pattern matching
+case Ok 100 of
+  Ok x => x
+  Error msg => 0
+
+-- Test nested pattern matching
+case Just (Ok 42) of
+  Nothing => 0
+  Just result => case result of
+    Ok x => x
+    Error msg => -1
+
+-- Test List constructors
+Nil
+
+Cons 1 Nil
+
+Cons 1 (Cons 2 (Cons 3 Nil))
+
+-- Test List pattern matching
+case Cons 1 (Cons 2 Nil) of
+  Nil => 0
+  Cons h t => h
+
+-- Final test - complex nested case
+case Cons (Just 42) (Cons Nothing Nil) of
+  Nil => 0
+  Cons first rest => case first of
+    Nothing => -1
+    Just x => x

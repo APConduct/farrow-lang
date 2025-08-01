@@ -1,0 +1,24 @@
+-- Minimal ADT Test
+-- Testing the most basic ADT functionality
+
+-- Simple enumeration without type parameters
+type Color = Red | Green | Blue
+
+-- Test creating color values
+red_val := Red
+green_val := Green
+blue_val := Blue
+
+-- Test pattern matching on colors
+color_to_string := color |-> case color of
+  Red => "red"
+  Green => "green"
+  Blue => "blue"
+
+-- Test the function
+test_red := color_to_string Red
+test_green := color_to_string Green
+test_blue := color_to_string Blue
+
+-- Final result
+"Minimal ADT test completed!"

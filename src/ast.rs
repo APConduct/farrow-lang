@@ -218,7 +218,7 @@ pub enum Type {
     },
 }
 
-/// Top-level declarations (for future module system)
+/// Top-level declarations
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     // Value declaration: x := expr
@@ -240,6 +240,13 @@ pub enum Decl {
         module: String,
         items: Option<Vec<String>>,
     },
+}
+
+/// A program now includes both declarations and optional main expression
+#[derive(Debug, Clone, PartialEq)]
+pub struct Module {
+    pub declarations: Vec<Decl>,
+    pub main_expr: Option<SpannedExpr>,
 }
 
 /// Type definitions (for future ADTs)

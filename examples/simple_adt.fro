@@ -1,0 +1,57 @@
+-- Simple ADT Test File
+-- Testing basic algebraic data type functionality without type parameters
+
+-- Define a simple Maybe type (without parameters for now)
+type Maybe = Nothing | Just Int
+
+-- Define a Result type for error handling (without parameters for now)
+type Result = Ok Int | Error String
+
+-- Define a simple Color enumeration
+type Color = Red | Green | Blue
+
+-- Test Maybe values
+nothing_val := Nothing
+just_val := Just 42
+
+-- Test pattern matching on Maybe
+check_maybe := val |-> case val of
+  Nothing => "empty"
+  Just x => "value: " + to_string x
+
+-- Test Result values
+ok_val := Ok 100
+error_val := Error "something went wrong"
+
+-- Test pattern matching on Result
+check_result := val |-> case val of
+  Ok x => "success: " + to_string x
+  Error msg => "error: " + msg
+
+-- Test Color values
+red_color := Red
+green_color := Green
+blue_color := Blue
+
+-- Test pattern matching on Color
+color_name := color |-> case color of
+  Red => "red"
+  Green => "green"
+  Blue => "blue"
+
+-- Safe division using Maybe
+safe_div := x |-> y |-> case y of
+  0 => Nothing
+  _ => Just (x / y)
+
+-- Test the functions
+test1 := check_maybe nothing_val
+test2 := check_maybe just_val
+test3 := check_result ok_val
+test4 := check_result error_val
+test5 := color_name red_color
+test6 := check_maybe (safe_div 10 2)
+test7 := check_maybe (safe_div 10 0)
+
+-- Final result
+"Simple ADT test completed!"

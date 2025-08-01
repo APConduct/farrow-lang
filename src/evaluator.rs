@@ -511,7 +511,7 @@ impl Evaluator {
                 }
                 Ok(Some(bindings))
             }
-            (Pattern::Constructor { name, args }, _) => {
+            (Pattern::Constructor { name: _, args: _ }, _) => {
                 // Constructor pattern doesn't match non-constructor value
                 Ok(None)
             }
@@ -760,7 +760,33 @@ impl Evaluator {
             "identity" => Ok(arg),
 
             // ADT constructor functions
-            name if self.is_constructor_name(name) => {
+            "Nothing" => {
+                // Nothing is a zero-argument constructor, but we got an argument
+                Err(RuntimeError::arity_mismatch(0, 1))
+            }
+            "Just" => Ok(Value::Constructor {
+                constructor: "Just".to_string(),
+                fields: vec![arg],
+            }),
+            "Ok" => Ok(Value::Constructor {
+                constructor: "Ok".to_string(),
+                fields: vec![arg],
+            }),
+            "Error" => Ok(Value::Constructor {
+                constructor: "Error".to_string(),
+                fields: vec![arg],
+            }),
+            "Cons" => {
+                // Cons needs two arguments, return partial application
+                Ok(Value::BuiltinFunction2("Cons".to_string(), Box::new(arg)))
+            }
+
+            // Generic constructor support
+            name if name
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_uppercase()) =>
+            {
                 // Single-argument constructor
                 Ok(Value::Constructor {
                     constructor: name.to_string(),
@@ -938,9 +964,20 @@ impl Evaluator {
                     _ => Err(RuntimeError::invalid_application(arg1.type_name())),
                 }
             }
+            "Cons" => {
+                // Cons takes two arguments: head and tail
+                Ok(Value::Constructor {
+                    constructor: "Cons".to_string(),
+                    fields: vec![arg1.clone(), arg2],
+                })
+            }
             _ => {
                 // Check if this is a multi-argument constructor
-                if self.is_constructor_name(name) {
+                if name
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_ascii_uppercase())
+                {
                     Ok(Value::Constructor {
                         constructor: name.to_string(),
                         fields: vec![arg1.clone(), arg2],
@@ -958,6 +995,102 @@ impl Evaluator {
     /// Get the current call stack (for debugging)
     pub fn call_stack(&self) -> &CallStack {
         &self.call_stack
+    }
+
+    /// Evaluate a module with type declarations
+    pub fn eval_module(
+        &mut self,
+        env: &Environment,
+        module: &crate::ast::Module,
+    ) -> RuntimeResult<Value> {
+        // First, register all type declarations
+        for decl in &module.declarations {
+            match decl {
+                crate::ast::Decl::Type {
+                    name,
+                    params,
+                    definition,
+                } => {
+                    self.register_type_declaration(env, name, params, definition)?;
+                }
+                _ => {} // Handle other declarations later
+            }
+        }
+
+        // Then evaluate value declarations
+        for decl in &module.declarations {
+            match decl {
+                crate::ast::Decl::Value { name, value, .. } => {
+                    let val = self.eval_expr(env, value)?;
+                    env.define(name.clone(), val);
+                }
+                _ => {} // Already handled above
+            }
+        }
+
+        // Finally, evaluate main expression if present
+        if let Some(main_expr) = &module.main_expr {
+            self.eval_expr(env, main_expr)
+        } else {
+            Ok(Value::Unit)
+        }
+    }
+
+    /// Register a type declaration in the environment
+    fn register_type_declaration(
+        &self,
+        env: &Environment,
+        name: &str,
+        params: &[String],
+        definition: &crate::ast::TypeDef,
+    ) -> RuntimeResult<()> {
+        match definition {
+            crate::ast::TypeDef::Sum(constructors) => {
+                let mut constructor_defs = Vec::new();
+
+                for constructor in constructors {
+                    let ctor_def = crate::environment::ConstructorDefinition {
+                        name: constructor.name.clone(),
+                        field_types: constructor.fields.clone(),
+                        arity: constructor.fields.len(),
+                    };
+                    constructor_defs.push(ctor_def);
+
+                    // Register constructor as a function in the environment
+                    match constructor.fields.len() {
+                        0 => {
+                            // Zero-argument constructor (constant)
+                            env.define(
+                                constructor.name.clone(),
+                                Value::Constructor {
+                                    constructor: constructor.name.clone(),
+                                    fields: vec![],
+                                },
+                            );
+                        }
+                        _ => {
+                            // Multi-argument constructor (function)
+                            env.define(
+                                constructor.name.clone(),
+                                Value::BuiltinFunction(constructor.name.clone()),
+                            );
+                        }
+                    }
+                }
+
+                let adt = crate::environment::AdtDefinition {
+                    name: name.to_string(),
+                    type_params: params.to_vec(),
+                    constructors: constructor_defs,
+                };
+
+                env.define_type(name.to_string(), adt);
+                Ok(())
+            }
+            _ => Err(RuntimeError::custom(
+                "Only sum types are currently supported",
+            )),
+        }
     }
 
     /// Check if a name is a constructor (starts with uppercase)

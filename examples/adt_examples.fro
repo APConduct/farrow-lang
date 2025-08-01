@@ -1,305 +1,377 @@
 -- Algebraic Data Types Examples
--- Demonstrates the use of ADTs in Farrow
+-- Demonstrates the use of ADTs in Farrow with proper syntax
 
 -- ===========================================
--- BASIC ADT DEFINITIONS AND USAGE
+-- BASIC ADT DEFINITIONS
 -- ===========================================
 
--- Simple ADT: Maybe type for optional values
--- Note: In a full implementation, these would be defined with 'type' keyword
--- For now, we use constructors directly
+-- Maybe type for optional values
+type Maybe a = Nothing | Just a
+
+-- Result type for error handling
+type Result a b = Ok a | Error b
+
+-- Simple enumeration
+type Color = Red | Green | Blue
+
+-- Binary tree
+type Tree a = Leaf | Node a (Tree a) (Tree a)
+
+-- ===========================================
+-- USING MAYBE TYPE
+-- ===========================================
 
 -- Creating Maybe values
 nothing_value := Nothing
-some_value := Just 42
-another_some := Just "hello"
+some_number := Just 42
+some_string := Just "hello"
 
 -- Pattern matching on Maybe
 process_maybe := maybe_val |-> case maybe_val of
   Nothing => "no value"
   Just x => "value: " + to_string x
 
--- Test Maybe pattern matching
+-- Safe division that returns Maybe
+safe_divide := x |-> y |-> case y of
+  0 => Nothing
+  _ => Just (x / y)
+
+-- Test Maybe operations
 test_nothing := process_maybe Nothing
 test_some := process_maybe (Just 42)
+test_safe_div_ok := process_maybe (safe_divide 10 2)
+test_safe_div_fail := process_maybe (safe_divide 10 0)
 
 -- ===========================================
--- RESULT TYPE FOR ERROR HANDLING
+-- USING RESULT TYPE
 -- ===========================================
 
--- Result type for computations that might fail
-safe_divide := x |-> y |-> case y of
-  0 => Error "Division by zero"
-  _ => Ok (x / y)
+-- Safe operations that can fail
+safe_sqrt := x |-> case x >= 0 of
+  true => Ok (sqrt x)
+  false => Error "Cannot take square root of negative number"
+
+-- Parse integer from string
+parse_int := str |-> case to_int str of
+  result => case int? result of
+    true => Ok result
+    false => Error ("Cannot parse: " + str)
 
 -- Pattern matching on Result
 handle_result := result |-> case result of
   Ok value => "Success: " + to_string value
   Error msg => "Error: " + msg
 
--- Test Result type
-division_success := handle_result (safe_divide 10 2)
-division_error := handle_result (safe_divide 10 0)
+-- Test Result operations
+test_sqrt_ok := handle_result (safe_sqrt 16)
+test_sqrt_fail := handle_result (safe_sqrt (-4))
+test_parse_ok := handle_result (parse_int "42")
+test_parse_fail := handle_result (parse_int "not_a_number")
 
 -- ===========================================
--- LIST TYPE (RECURSIVE ADT)
+-- RESULT CHAINING (MONADIC OPERATIONS)
 -- ===========================================
 
--- Custom list implementation using ADTs
--- Nil represents empty list, Cons represents head:tail
+-- Result bind operation
+result_bind := result |-> f |-> case result of
+  Error msg => Error msg
+  Ok value => f value
 
--- Creating lists with constructors
-empty_list := Nil
-single_item := Cons 1 Nil
-multiple_items := Cons 1 (Cons 2 (Cons 3 Nil))
+-- Chain multiple operations that might fail
+compute_chain := x |->
+  result_bind (safe_sqrt x) (sqrt_val |->
+    result_bind (safe_divide 100 sqrt_val) (div_val |->
+      Ok (div_val * 2)))
 
--- List length function using pattern matching
-list_length := μlen |-> (lst |-> case lst of
-  Nil => 0
-  Cons h t => 1 + len t)
-
--- List sum function
-list_sum := μsum |-> (lst |-> case lst of
-  Nil => 0
-  Cons h t => h + sum t)
-
--- List map function
-list_map := μmap |-> (f |-> (lst |-> case lst of
-  Nil => Nil
-  Cons h t => Cons (f h) (map f t)))
-
--- Test custom list functions
-test_length := list_length multiple_items
-test_sum := list_sum multiple_items
-test_mapped := list_map (x |-> x * 2) multiple_items
+-- Test chaining
+test_chain_ok := handle_result (compute_chain 25)    -- Should work: sqrt(25) = 5, 100/5 = 20, 20*2 = 40
+test_chain_fail := handle_result (compute_chain (-4)) -- Should fail at sqrt
 
 -- ===========================================
--- TREE DATA STRUCTURE
+-- COLOR ENUMERATION
 -- ===========================================
 
--- Binary tree ADT
+-- Color operations
+color_to_string := color |-> case color of
+  Red => "red"
+  Green => "green"
+  Blue => "blue"
+
+-- Color mixing (simplified)
+mix_colors := c1 |-> c2 |-> case c1 of
+  Red => case c2 of
+    Blue => "purple"
+    Green => "brown"
+    Red => "red"
+  Green => case c2 of
+    Blue => "teal"
+    Red => "brown"
+    Green => "green"
+  Blue => case c2 of
+    Red => "purple"
+    Green => "teal"
+    Blue => "blue"
+
+-- Test colors
+primary_colors := [Red, Green, Blue]
+color_names := map color_to_string primary_colors
+mixed_color := mix_colors Red Blue
+
+-- ===========================================
+-- BINARY TREE OPERATIONS
+-- ===========================================
+
+-- Creating trees
 empty_tree := Leaf
-simple_tree := Node 5 Leaf Leaf
-complex_tree := Node 10
+single_node := Node 5 Leaf Leaf
+sample_tree := Node 10
   (Node 5 Leaf Leaf)
   (Node 15
     (Node 12 Leaf Leaf)
     (Node 20 Leaf Leaf))
 
 -- Tree depth calculation
-tree_depth := μdepth |-> (tree |-> case tree of
+tree_depth := μdepth |-> tree |-> case tree of
   Leaf => 0
-  Node value left right => 1 + max (depth left) (depth right))
+  Node value left right => 1 + max (depth left) (depth right)
 
 -- Tree sum calculation
-tree_sum := μsum |-> (tree |-> case tree of
+tree_sum := μsum |-> tree |-> case tree of
   Leaf => 0
-  Node value left right => value + sum left + sum right)
+  Node value left right => value + sum left + sum right
+
+-- Tree size (count nodes)
+tree_size := μsize |-> tree |-> case tree of
+  Leaf => 0
+  Node value left right => 1 + size left + size right
 
 -- In-order traversal
-tree_inorder := μinorder |-> (tree |-> case tree of
-  Leaf => Nil
+tree_inorder := μinorder |-> tree |-> case tree of
+  Leaf => []
   Node value left right =>
-    concat (concat (inorder left) (Cons value Nil)) (inorder right))
+    concat (concat (inorder left) [value]) (inorder right)
 
--- Test tree functions
-test_tree_depth := tree_depth complex_tree
-test_tree_sum := tree_sum complex_tree
-test_tree_traversal := tree_inorder complex_tree
+-- Insert into binary search tree
+tree_insert := μinsert |-> value |-> tree |-> case tree of
+  Leaf => Node value Leaf Leaf
+  Node node_val left right => case value <= node_val of
+    true => Node node_val (insert value left) right
+    false => Node node_val left (insert value right)
 
--- ===========================================
--- OPTION CHAINING AND COMBINATORS
--- ===========================================
+-- Search in binary search tree
+tree_search := μsearch |-> value |-> tree |-> case tree of
+  Leaf => false
+  Node node_val left right => case value == node_val of
+    true => true
+    false => case value < node_val of
+      true => search value left
+      false => search value right
 
--- Option bind (flatMap) operation
-option_bind := μbind |-> (maybe_val |-> (f |-> case maybe_val of
-  Nothing => Nothing
-  Just x => f x))
+-- Test tree operations
+test_depth := tree_depth sample_tree
+test_sum := tree_sum sample_tree
+test_size := tree_size sample_tree
+test_traversal := tree_inorder sample_tree
 
--- Option map operation
-option_map := f |-> (maybe_val |-> case maybe_val of
-  Nothing => Nothing
-  Just x => Just (f x))
+-- Build BST from list
+bst_from_list := μbuild |-> values |-> tree |-> case values of
+  [] => tree
+  h : t => build t (tree_insert h tree)
 
--- Chain multiple Maybe operations
-safe_sqrt := x |-> case x >= 0 of
-  true => Just (sqrt x)
-  false => Nothing
-
-safe_reciprocal := x |-> case x == 0 of
-  true => Nothing
-  false => Just (1.0 / x)
-
--- Chaining operations that might fail
-chained_computation := x |->
-  option_bind (safe_sqrt x) (y |->
-    option_bind (safe_reciprocal y) (z |->
-      Just (z * 100)))
-
--- Test option chaining
-test_chain_success := chained_computation 4   -- Should work
-test_chain_fail := chained_computation (-1)   -- Should fail
+test_bst := bst_from_list [5, 3, 7, 1, 9, 4, 6] Leaf
+test_bst_search := tree_search 7 test_bst
+test_bst_traversal := tree_inorder test_bst
 
 -- ===========================================
--- STATE MACHINE USING ADTS
+-- LIST TYPE (RECURSIVE ADT)
 -- ===========================================
 
--- Traffic light state machine
-red_light := Red
-yellow_light := Yellow
-green_light := Green
+-- Note: We already have built-in List type, but here's how it would be defined
+-- type List a = Nil | Cons a (List a)
 
--- State transition function
-next_light := current |-> case current of
-  Red => Green
-  Green => Yellow
-  Yellow => Red
+-- Custom list operations using our constructors
+my_empty_list := Nil
+my_list := Cons 1 (Cons 2 (Cons 3 Nil))
 
--- Get light duration
-light_duration := light |-> case light of
-  Red => 30
-  Yellow => 5
-  Green => 25
+-- Custom list length
+my_list_length := μlen |-> lst |-> case lst of
+  Nil => 0
+  Cons h t => 1 + len t
 
--- Simulate traffic light sequence
-light_sequence := μseq |-> (light |-> (steps |-> case steps of
-  0 => Nil
-  _ => Cons light (seq (next_light light) (steps - 1))))
+-- Custom list map
+my_list_map := μmap |-> f |-> lst |-> case lst of
+  Nil => Nil
+  Cons h t => Cons (f h) (map f t)
 
--- Test traffic light simulation
-traffic_simulation := light_sequence Red 6
+-- Custom list filter
+my_list_filter := μfilter |-> predicate |-> lst |-> case lst of
+  Nil => Nil
+  Cons h t => case predicate h of
+    true => Cons h (filter predicate t)
+    false => filter predicate t
+
+-- Custom list append
+my_list_append := μappend |-> lst1 |-> lst2 |-> case lst1 of
+  Nil => lst2
+  Cons h t => Cons h (append t lst2)
+
+-- Test custom list operations
+test_my_length := my_list_length my_list
+test_my_map := my_list_map (x |-> x * 2) my_list
+test_my_filter := my_list_filter (x |-> x % 2 == 1) my_list
+test_my_append := my_list_append my_list (Cons 4 (Cons 5 Nil))
 
 -- ===========================================
--- EXPRESSION EVALUATOR USING ADTS
+-- ADVANCED ADT: EXPRESSION EVALUATOR
 -- ===========================================
 
--- Simple arithmetic expression ADT
-num_expr := Num 42
+-- Simple arithmetic expressions
+type Expr =
+    Num Int
+  | Add Expr Expr
+  | Mul Expr Expr
+  | Sub Expr Expr
+  | Div Expr Expr
+
+-- Creating expressions
+simple_expr := Num 42
 add_expr := Add (Num 10) (Num 32)
-mul_expr := Mul (Num 6) (Num 7)
 complex_expr := Add (Mul (Num 3) (Num 4)) (Num 5)
+nested_expr := Mul (Add (Num 2) (Num 3)) (Sub (Num 10) (Num 4))
 
 -- Expression evaluator
-eval_expr := μeval |-> (expr |-> case expr of
+eval_expr := μeval |-> expr |-> case expr of
   Num n => n
   Add left right => eval left + eval right
   Mul left right => eval left * eval right
-  Sub left right => eval left - eval right)
+  Sub left right => eval left - eval right
+  Div left right => case eval right of
+    0 => error "Division by zero in expression"
+    divisor => eval left / divisor
+
+-- Safe expression evaluator that returns Result
+safe_eval_expr := μeval |-> expr |-> case expr of
+  Num n => Ok n
+  Add left right =>
+    result_bind (eval left) (l |->
+      result_bind (eval right) (r |->
+        Ok (l + r)))
+  Mul left right =>
+    result_bind (eval left) (l |->
+      result_bind (eval right) (r |->
+        Ok (l * r)))
+  Sub left right =>
+    result_bind (eval left) (l |->
+      result_bind (eval right) (r |->
+        Ok (l - r)))
+  Div left right =>
+    result_bind (eval left) (l |->
+      result_bind (eval right) (r |->
+        case r of
+          0 => Error "Division by zero"
+          _ => Ok (l / r)))
 
 -- Test expression evaluation
-test_num := eval_expr num_expr
+test_simple := eval_expr simple_expr
 test_add := eval_expr add_expr
-test_mul := eval_expr mul_expr
 test_complex := eval_expr complex_expr
+test_nested := eval_expr nested_expr
+
+test_safe_expr := handle_result (safe_eval_expr complex_expr)
+test_safe_div_zero := handle_result (safe_eval_expr (Div (Num 1) (Num 0)))
 
 -- ===========================================
--- JSON-LIKE DATA STRUCTURE
+-- ADT PATTERN MATCHING EXAMPLES
 -- ===========================================
 
--- JSON value representation
-json_null := JsonNull
-json_bool := JsonBool true
-json_number := JsonNumber 42
-json_string := JsonString "hello"
-json_array := JsonArray (Cons json_number (Cons json_string Nil))
+-- Complex pattern matching with nested structures
+analyze_tree := tree |-> case tree of
+  Leaf => "Empty tree"
+  Node value Leaf Leaf => "Single node with value: " + to_string value
+  Node value left Leaf => "Node with left child only"
+  Node value Leaf right => "Node with right child only"
+  Node value left right => "Node with both children"
 
--- JSON object (simplified - would need map/dictionary in full implementation)
-person_json := JsonObject
-  (Cons (Pair "name" (JsonString "Alice"))
-    (Cons (Pair "age" (JsonNumber 30))
-      (Cons (Pair "active" (JsonBool true)) Nil)))
+-- Pattern matching with guards (conceptual - would need guard syntax)
+classify_number := maybe_num |-> case maybe_num of
+  Nothing => "No number"
+  Just n => case n > 0 of
+    true => case n > 100 of
+      true => "Large positive number"
+      false => "Small positive number"
+    false => case n == 0 of
+      true => "Zero"
+      false => "Negative number"
 
--- JSON pretty printer
-json_to_string := μjson_str |-> (json |-> case json of
-  JsonNull => "null"
-  JsonBool b => case b of true => "true"; false => "false"
-  JsonNumber n => to_string n
-  JsonString s => "\"" + s + "\""
-  JsonArray items => "[" + array_to_string items + "]"
-  JsonObject pairs => "{" + object_to_string pairs + "}")
-
--- Helper functions would be needed for full implementation
--- array_to_string and object_to_string
-
--- Test JSON representation
-test_json_simple := json_to_string json_number
-test_json_bool := json_to_string json_bool
+-- Test pattern matching
+test_tree_analysis := analyze_tree sample_tree
+test_number_class := classify_number (Just 42)
 
 -- ===========================================
--- ADT BENEFITS DEMONSTRATION
+-- ADT COMPOSITION
 -- ===========================================
 
--- ADTs provide:
--- 1. Type safety - impossible to create invalid states
--- 2. Exhaustive pattern matching - compiler ensures all cases handled
--- 3. Immutability - functional data structures
--- 4. Composability - ADTs can be nested and combined
--- 5. Self-documenting - structure describes the data
+-- Combining ADTs
+type Status = Active | Inactive | Pending
 
--- Example: Safe array indexing
-safe_get := μget |-> (index |-> (array |->
-  case index < 0 || index >= length array of
-    true => Nothing
-    false => Just (array !! index)))  -- hypothetical indexing operator
+-- User with optional email and status
+user_data := {
+  name: "Alice",
+  email: Just "alice@example.com",
+  status: Active
+}
 
--- Example: Parsing result
-parse_int := str |-> case to_int str of
-  result => case int? result of
-    true => Ok result
-    false => Error ("Cannot parse: " + str)
+-- Process user data
+process_user := user |->
+  let email_msg := case user.email of
+    Nothing => "No email provided"
+    Just addr => "Email: " + addr
+  in
+  let status_msg := case user.status of
+    Active => "User is active"
+    Inactive => "User is inactive"
+    Pending => "User registration pending"
+  in
+  user.name + " - " + email_msg + " - " + status_msg
 
--- Chain parsing operations
-parse_and_double := str |-> case parse_int str of
-  Ok n => Ok (n * 2)
-  Error msg => Error msg
+-- Note: The above uses record syntax which isn't implemented yet
+-- Here's a version with tuples/constructors instead:
 
--- Test parsing
-test_parse_success := parse_and_double "42"
-test_parse_failure := parse_and_double "not_a_number"
+type User = User String (Maybe String) Status
 
--- ===========================================
--- RECURSIVE DATA PROCESSING
--- ===========================================
+alice := User "Alice" (Just "alice@example.com") Active
+bob := User "Bob" Nothing Pending
 
--- Nested list processing
-nested_list := Cons
-  (Cons 1 (Cons 2 Nil))
-  (Cons
-    (Cons 3 (Cons 4 Nil))
-    (Cons
-      (Cons 5 Nil)
-      Nil))
+process_user_adt := user |-> case user of
+  User name email status =>
+    let email_msg := case email of
+      Nothing => "No email"
+      Just addr => "Email: " + addr
+    in
+    let status_msg := case status of
+      Active => "Active"
+      Inactive => "Inactive"
+      Pending => "Pending"
+    in
+    name + " (" + email_msg + ", " + status_msg + ")"
 
--- Flatten nested structure
-flatten_lists := μflatten |-> (nested |-> case nested of
-  Nil => Nil
-  Cons head tail => case head of
-    Nil => flatten tail
-    Cons h t => Cons h (flatten (Cons t tail)))
-
--- Test nested processing
-test_flatten := flatten_lists nested_list
+test_alice := process_user_adt alice
+test_bob := process_user_adt bob
 
 -- ===========================================
--- SUMMARY
+-- SUMMARY AND FINAL RESULT
 -- ===========================================
 
 -- This file demonstrates:
--- ✅ Maybe/Option types for null safety
--- ✅ Result types for error handling
--- ✅ Recursive data structures (Lists, Trees)
--- ✅ State machines with ADTs
--- ✅ Expression evaluation using ADTs
--- ✅ JSON-like data representation
--- ✅ Safe operations with pattern matching
--- ✅ Nested data structure processing
-
--- ADTs are the foundation for:
--- - Domain modeling
--- - Safe error handling
--- - Recursive algorithms
--- - Parser combinators
--- - State machines
--- - Functional data structures
+-- ✅ Type declarations with 'type' keyword
+-- ✅ Sum types with multiple constructors
+-- ✅ Recursive data types (Tree, List)
+-- ✅ Pattern matching on ADTs
+-- ✅ Maybe type for null safety
+-- ✅ Result type for error handling
+-- ✅ Monadic operations (bind/chain)
+-- ✅ Complex nested pattern matching
+-- ✅ ADT composition and combination
+-- ✅ Real-world examples (BST, expression evaluator)
 
 "ADT examples completed successfully!"

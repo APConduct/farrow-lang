@@ -1,0 +1,4 @@
+let check := val |-> case val of
+    Nothing => "empty"
+    Just x => "value"
+in check

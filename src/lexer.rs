@@ -37,6 +37,8 @@ pub enum Token {
     Import,
     #[token("type")]
     Type,
+    #[token("data")]
+    Data,
 
     // Lambda and mu symbols
     #[token("λ")]
@@ -90,6 +92,8 @@ pub enum Token {
     FatArrow,
     #[token("|->")]
     LambdaArrow,
+    #[token("=")]
+    Equals,
 
     // List operations
     #[token("<>")]
@@ -232,6 +236,7 @@ impl std::fmt::Display for Token {
             Token::False => write!(f, "false"),
             Token::Import => write!(f, "import"),
             Token::Type => write!(f, "type"),
+            Token::Data => write!(f, "data"),
             Token::Lambda => write!(f, "λ"),
             Token::Mu => write!(f, "μ"),
             Token::Plus => write!(f, "+"),
@@ -253,6 +258,7 @@ impl std::fmt::Display for Token {
             Token::Arrow => write!(f, "->"),
             Token::FatArrow => write!(f, "=>"),
             Token::LambdaArrow => write!(f, "|->"),
+            Token::Equals => write!(f, "="),
             Token::Append => write!(f, "<>"),
             Token::Cons => write!(f, ":"),
             Token::Pipe => write!(f, "|>"),
