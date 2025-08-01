@@ -28,12 +28,12 @@ some_string := Just "hello"
 
 -- Pattern matching on Maybe
 process_maybe := maybe_val |-> case maybe_val of
-  Nothing => "no value"
+  Nothing => "no value",
   Just x => "value: " + to_string x
 
 -- Safe division that returns Maybe
 safe_divide := x |-> y |-> case y of
-  0 => Nothing
+  0 => Nothing,
   _ => Just (x / y)
 
 -- Test Maybe operations
@@ -54,12 +54,12 @@ safe_sqrt := x |-> case x >= 0 of
 -- Parse integer from string
 parse_int := str |-> case to_int str of
   result => case int? result of
-    true => Ok result
+    true => Ok result,
     false => Error ("Cannot parse: " + str)
 
 -- Pattern matching on Result
 handle_result := result |-> case result of
-  Ok value => "Success: " + to_string value
+  Ok value => "Success: " + to_string value,
   Error msg => "Error: " + msg
 
 -- Test Result operations
@@ -74,7 +74,7 @@ test_parse_fail := handle_result (parse_int "not_a_number")
 
 -- Result bind operation
 result_bind := result |-> f |-> case result of
-  Error msg => Error msg
+  Error msg => Error msg,
   Ok value => f value
 
 -- Chain multiple operations that might fail
@@ -93,23 +93,23 @@ test_chain_fail := handle_result (compute_chain (-4)) -- Should fail at sqrt
 
 -- Color operations
 color_to_string := color |-> case color of
-  Red => "red"
-  Green => "green"
+  Red => "red",
+  Green => "green",
   Blue => "blue"
 
 -- Color mixing (simplified)
 mix_colors := c1 |-> c2 |-> case c1 of
   Red => case c2 of
-    Blue => "purple"
-    Green => "brown"
-    Red => "red"
+    Blue => "purple",
+    Green => "brown",
+    Red => "red",
   Green => case c2 of
-    Blue => "teal"
-    Red => "brown"
-    Green => "green"
+    Blue => "teal",
+    Red => "brown",
+    Green => "green",
   Blue => case c2 of
-    Red => "purple"
-    Green => "teal"
+    Red => "purple",
+    Green => "teal",
     Blue => "blue"
 
 -- Test colors
@@ -132,22 +132,22 @@ sample_tree := Node 10
 
 -- Tree depth calculation
 tree_depth := μdepth |-> tree |-> case tree of
-  Leaf => 0
+  Leaf => 0,
   Node value left right => 1 + max (depth left) (depth right)
 
 -- Tree sum calculation
 tree_sum := μsum |-> tree |-> case tree of
-  Leaf => 0
+  Leaf => 0,
   Node value left right => value + sum left + sum right
 
 -- Tree size (count nodes)
 tree_size := μsize |-> tree |-> case tree of
-  Leaf => 0
+  Leaf => 0,
   Node value left right => 1 + size left + size right
 
 -- In-order traversal
 tree_inorder := μinorder |-> tree |-> case tree of
-  Leaf => []
+  Leaf => [],
   Node value left right =>
     concat (concat (inorder left) [value]) (inorder right)
 
@@ -160,11 +160,11 @@ tree_insert := μinsert |-> value |-> tree |-> case tree of
 
 -- Search in binary search tree
 tree_search := μsearch |-> value |-> tree |-> case tree of
-  Leaf => false
+  Leaf => false,
   Node node_val left right => case value == node_val of
-    true => true
+    true => true,
     false => case value < node_val of
-      true => search value left
+      true => search value left,
       false => search value right
 
 -- Test tree operations
@@ -175,7 +175,7 @@ test_traversal := tree_inorder sample_tree
 
 -- Build BST from list
 bst_from_list := μbuild |-> values |-> tree |-> case values of
-  [] => tree
+  [] => tree,
   h : t => build t (tree_insert h tree)
 
 test_bst := bst_from_list [5, 3, 7, 1, 9, 4, 6] Leaf
@@ -195,24 +195,24 @@ my_list := Cons 1 (Cons 2 (Cons 3 Nil))
 
 -- Custom list length
 my_list_length := μlen |-> lst |-> case lst of
-  Nil => 0
+  Nil => 0,
   Cons h t => 1 + len t
 
 -- Custom list map
 my_list_map := μmap |-> f |-> lst |-> case lst of
-  Nil => Nil
+  Nil => Nil,
   Cons h t => Cons (f h) (map f t)
 
 -- Custom list filter
 my_list_filter := μfilter |-> predicate |-> lst |-> case lst of
-  Nil => Nil
+  Nil => Nil,
   Cons h t => case predicate h of
-    true => Cons h (filter predicate t)
+    true => Cons h (filter predicate t),
     false => filter predicate t
 
 -- Custom list append
 my_list_append := μappend |-> lst1 |-> lst2 |-> case lst1 of
-  Nil => lst2
+  Nil => lst2,
   Cons h t => Cons h (append t lst2)
 
 -- Test custom list operations
@@ -241,34 +241,34 @@ nested_expr := Mul (Add (Num 2) (Num 3)) (Sub (Num 10) (Num 4))
 
 -- Expression evaluator
 eval_expr := μeval |-> expr |-> case expr of
-  Num n => n
-  Add left right => eval left + eval right
-  Mul left right => eval left * eval right
-  Sub left right => eval left - eval right
+  Num n => n,
+  Add left right => eval left + eval right,
+  Mul left right => eval left * eval right,
+  Sub left right => eval left - eval right,
   Div left right => case eval right of
-    0 => error "Division by zero in expression"
+    0 => error "Division by zero in expression",
     divisor => eval left / divisor
 
 -- Safe expression evaluator that returns Result
 safe_eval_expr := μeval |-> expr |-> case expr of
-  Num n => Ok n
+  Num n => Ok n,
   Add left right =>
     result_bind (eval left) (l |->
       result_bind (eval right) (r |->
-        Ok (l + r)))
+        Ok (l + r))),
   Mul left right =>
     result_bind (eval left) (l |->
       result_bind (eval right) (r |->
-        Ok (l * r)))
+        Ok (l * r))),
   Sub left right =>
     result_bind (eval left) (l |->
       result_bind (eval right) (r |->
-        Ok (l - r)))
+        Ok (l - r))),
   Div left right =>
     result_bind (eval left) (l |->
       result_bind (eval right) (r |->
         case r of
-          0 => Error "Division by zero"
+          0 => Error "Division by zero",
           _ => Ok (l / r)))
 
 -- Test expression evaluation
@@ -297,10 +297,10 @@ classify_number := maybe_num |-> case maybe_num of
   Nothing => "No number"
   Just n => case n > 0 of
     true => case n > 100 of
-      true => "Large positive number"
-      false => "Small positive number"
+      true => "Large positive number",
+      false => "Small positive number",
     false => case n == 0 of
-      true => "Zero"
+      true => "Zero",
       false => "Negative number"
 
 -- Test pattern matching
@@ -324,12 +324,12 @@ user_data := {
 -- Process user data
 process_user := user |->
   let email_msg := case user.email of
-    Nothing => "No email provided"
+    Nothing => "No email provided",
     Just addr => "Email: " + addr
   in
   let status_msg := case user.status of
-    Active => "User is active"
-    Inactive => "User is inactive"
+    Active => "User is active",
+    Inactive => "User is inactive",
     Pending => "User registration pending"
   in
   user.name + " - " + email_msg + " - " + status_msg
@@ -345,12 +345,12 @@ bob := User "Bob" Nothing Pending
 process_user_adt := user |-> case user of
   User name email status =>
     let email_msg := case email of
-      Nothing => "No email"
+      Nothing => "No email",
       Just addr => "Email: " + addr
     in
     let status_msg := case status of
-      Active => "Active"
-      Inactive => "Inactive"
+      Active => "Active",
+      Inactive => "Inactive",
       Pending => "Pending"
     in
     name + " (" + email_msg + ", " + status_msg + ")"

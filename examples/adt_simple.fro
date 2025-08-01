@@ -13,7 +13,7 @@ case Nothing of
 
 -- Test pattern matching on Just
 case Just 42 of
-  Nothing => "empty"
+  Nothing => "empty",
   Just x => x
 
 -- Test Ok constructor
@@ -24,14 +24,14 @@ Error "failed"
 
 -- Test Result pattern matching
 case Ok 100 of
-  Ok x => x
+  Ok x => x,
   Error msg => 0
 
 -- Test nested pattern matching
 case Just (Ok 42) of
-  Nothing => 0
+  Nothing => 0,
   Just result => case result of
-    Ok x => x
+    Ok x => x,
     Error msg => -1
 
 -- Test List constructors
@@ -43,12 +43,12 @@ Cons 1 (Cons 2 (Cons 3 Nil))
 
 -- Test List pattern matching
 case Cons 1 (Cons 2 Nil) of
-  Nil => 0
+  Nil => 0,
   Cons h t => h
 
 -- Final test - complex nested case
 case Cons (Just 42) (Cons Nothing Nil) of
-  Nil => 0
+  Nil => 0,
   Cons first rest => case first of
-    Nothing => -1
+    Nothing => -1,
     Just x => x

@@ -9,7 +9,7 @@ error_val := Error "oops"
 
 -- Pattern matching functions
 check_maybe := val |-> case val of
-  Nothing => "no value"
+  Nothing => "no value",
   Just x => "value: " + to_string x
 
 check_result := val |-> case val of
@@ -18,12 +18,12 @@ check_result := val |-> case val of
 
 -- Safe division using Maybe
 safe_divide := x |-> y |-> case y of
-  0 => Nothing
+  0 => Nothing,
   _ => Just (x / y)
 
 -- Chain Maybe operations
 maybe_double := val |-> case val of
-  Nothing => Nothing
+  Nothing => Nothing,
   Just x => Just (x * 2)
 
 -- Test all the functions
@@ -43,11 +43,11 @@ my_list := Cons 1 (Cons 2 (Cons 3 Nil))
 empty_list := Nil
 
 list_length := μlen |-> lst |-> case lst of
-  Nil => 0
+  Nil => 0,
   Cons h t => 1 + len t
 
 list_sum := μsum |-> lst |-> case lst of
-  Nil => 0
+  Nil => 0,
   Cons h t => h + sum t
 
 test9 := list_length my_list               -- 3
