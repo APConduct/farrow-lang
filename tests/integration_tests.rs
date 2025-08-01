@@ -351,4 +351,153 @@ mod tests {
         "#;
         assert_eq!(eval_string(block_recursive).unwrap(), "24");
     }
+
+    #[test]
+    fn test_enhanced_standard_library() {
+        // Higher-order list functions
+        assert_eq!(
+            eval_string("map (x |-> x * 2) [1, 2, 3]").unwrap(),
+            "[2, 4, 6]"
+        );
+        assert_eq!(
+            eval_string("filter (x |-> x > 2) [1, 2, 3, 4, 5]").unwrap(),
+            "[3, 4, 5]"
+        );
+
+        // List utility functions
+        assert_eq!(eval_string("take 3 [1, 2, 3, 4, 5]").unwrap(), "[1, 2, 3]");
+        assert_eq!(eval_string("drop 2 [1, 2, 3, 4, 5]").unwrap(), "[3, 4, 5]");
+        assert_eq!(eval_string("concat [1, 2] [3, 4]").unwrap(), "[1, 2, 3, 4]");
+        assert_eq!(
+            eval_string("sort [3, 1, 4, 1, 5]").unwrap(),
+            "[1, 1, 3, 4, 5]"
+        );
+        assert_eq!(
+            eval_string("flatten [[1, 2], [3, 4]]").unwrap(),
+            "[1, 2, 3, 4]"
+        );
+        assert_eq!(eval_string("contains 3 [1, 2, 3, 4]").unwrap(), "true");
+        assert_eq!(eval_string("contains 9 [1, 2, 3, 4]").unwrap(), "false");
+
+        // String functions
+        assert_eq!(eval_string("string_length \"hello\"").unwrap(), "5");
+        assert_eq!(
+            eval_string("string_concat \"hello\" \" world\"").unwrap(),
+            "\"hello world\""
+        );
+        assert_eq!(
+            eval_string("string_trim \"  hello  \"").unwrap(),
+            "\"hello\""
+        );
+        assert_eq!(eval_string("string_upper \"hello\"").unwrap(), "\"HELLO\"");
+        assert_eq!(eval_string("string_lower \"HELLO\"").unwrap(), "\"hello\"");
+        assert_eq!(
+            eval_string("string_contains \"ell\" \"hello\"").unwrap(),
+            "true"
+        );
+        assert_eq!(
+            eval_string("string_starts_with \"he\" \"hello\"").unwrap(),
+            "true"
+        );
+        assert_eq!(
+            eval_string("string_ends_with \"lo\" \"hello\"").unwrap(),
+            "true"
+        );
+        assert_eq!(eval_string("char_at 1 \"hello\"").unwrap(), "\"e\"");
+        assert_eq!(
+            eval_string("string_split \" \" \"hello world\"").unwrap(),
+            "[\"hello\", \"world\"]"
+        );
+
+        // Math functions
+        assert_eq!(eval_string("min 5 3").unwrap(), "3");
+        assert_eq!(eval_string("max 5 3").unwrap(), "5");
+        assert_eq!(eval_string("pow 2 8").unwrap(), "256");
+        assert_eq!(eval_string("sqrt 16").unwrap(), "4");
+        assert_eq!(eval_string("abs (-5)").unwrap(), "5");
+        assert_eq!(eval_string("sign (-5)").unwrap(), "-1");
+        assert_eq!(eval_string("sign 5").unwrap(), "1");
+        assert_eq!(eval_string("floor 3.7").unwrap(), "3");
+        assert_eq!(eval_string("ceil 3.2").unwrap(), "4");
+        assert_eq!(eval_string("round 3.6").unwrap(), "4");
+
+        // Trigonometric functions (approximate tests)
+        let sin_result = eval_string("sin 0").unwrap();
+        assert_eq!(sin_result, "0");
+        let cos_result = eval_string("cos 0").unwrap();
+        assert_eq!(cos_result, "1");
+
+        // Type conversion functions
+        assert_eq!(eval_string("to_string 42").unwrap(), "\"42\"");
+        assert_eq!(eval_string("to_int \"42\"").unwrap(), "42");
+        assert_eq!(eval_string("to_float 42").unwrap(), "42");
+
+        // Extended type predicates
+        assert_eq!(eval_string("int? 42").unwrap(), "true");
+        assert_eq!(eval_string("float? 3.14").unwrap(), "true");
+        assert_eq!(eval_string("string? \"hello\"").unwrap(), "true");
+        assert_eq!(eval_string("bool? true").unwrap(), "true");
+        assert_eq!(eval_string("list? [1, 2, 3]").unwrap(), "true");
+        assert_eq!(eval_string("unit? ()").unwrap(), "true");
+
+        // Utility functions
+        assert_eq!(eval_string("identity 42").unwrap(), "42");
+        assert_eq!(eval_string("const 42 99").unwrap(), "42");
+        assert_eq!(eval_string("apply (x |-> x + 1) 5").unwrap(), "6");
+    }
+
+    #[test]
+    fn test_standard_library_composition() {
+        // Test composing multiple standard library functions
+        let complex_example = r#"
+            let numbers := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] in
+            let evens := filter (x |-> x % 2 == 0) numbers in
+            let doubled := map (x |-> x * 2) evens in
+            take 3 doubled
+        "#;
+        assert_eq!(eval_string(complex_example).unwrap(), "[4, 8, 12]");
+
+        // String processing pipeline
+        let string_pipeline = r#"
+            let text := "  Hello World  " in
+            let trimmed := string_trim text in
+            let upper := string_upper trimmed in
+            string_split " " upper
+        "#;
+        assert_eq!(
+            eval_string(string_pipeline).unwrap(),
+            "[\"HELLO\", \"WORLD\"]"
+        );
+
+        // Math computation
+        let math_computation = r#"
+            let numbers := [1, 4, 9, 16] in
+            let roots := map sqrt numbers in
+            map (x |-> round x) roots
+        "#;
+        assert_eq!(eval_string(math_computation).unwrap(), "[1, 2, 3, 4]");
+    }
+
+    #[test]
+    fn test_curried_functions() {
+        // Test that multi-argument functions are properly curried
+        assert_eq!(eval_string("let add := pow 2 in add 3").unwrap(), "8");
+        assert_eq!(
+            eval_string("let double_all := map (x |-> x * 2) in double_all [1, 2, 3]").unwrap(),
+            "[2, 4, 6]"
+        );
+        assert_eq!(
+            eval_string("let take_two := take 2 in take_two [1, 2, 3, 4]").unwrap(),
+            "[1, 2]"
+        );
+    }
+
+    #[test]
+    fn test_standard_library_error_cases() {
+        // Test error handling in standard library functions
+        assert!(eval_string("char_at 10 \"hello\"").is_err()); // Index out of bounds
+        assert!(eval_string("to_int \"not_a_number\"").is_err()); // Invalid conversion
+        assert!(eval_string("to_float \"invalid\"").is_err()); // Invalid conversion
+        assert!(eval_string("sqrt (-1)").is_ok()); // Should return NaN but not error
+    }
 }

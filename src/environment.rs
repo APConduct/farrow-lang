@@ -24,6 +24,7 @@ pub enum Value {
         env: Environment,
     },
     BuiltinFunction(String),
+    BuiltinFunction2(String, Box<Value>), // For curried built-ins
 }
 
 impl Value {
@@ -39,6 +40,7 @@ impl Value {
             Value::Function { .. } => "function",
             Value::RecFunction { .. } => "recursive function",
             Value::BuiltinFunction(_) => "builtin function",
+            Value::BuiltinFunction2(..) => "builtin function",
         }
     }
 
@@ -46,7 +48,10 @@ impl Value {
     pub fn is_callable(&self) -> bool {
         matches!(
             self,
-            Value::Function { .. } | Value::RecFunction { .. } | Value::BuiltinFunction(_)
+            Value::Function { .. }
+                | Value::RecFunction { .. }
+                | Value::BuiltinFunction(_)
+                | Value::BuiltinFunction2(..)
         )
     }
 
@@ -87,6 +92,7 @@ impl std::fmt::Display for Value {
                 write!(f, "<recursive function {} {}>", name, param)
             }
             Value::BuiltinFunction(name) => write!(f, "<builtin {}>", name),
+            Value::BuiltinFunction2(name, _) => write!(f, "<builtin {} (partial)>", name),
         }
     }
 }
@@ -182,11 +188,21 @@ impl Environment {
     pub fn global() -> Self {
         let env = Environment::new();
 
-        // Built-in functions
+        // I/O functions
         env.define(
             "print".to_string(),
             Value::BuiltinFunction("print".to_string()),
         );
+        env.define(
+            "println".to_string(),
+            Value::BuiltinFunction("println".to_string()),
+        );
+        env.define(
+            "print_line".to_string(),
+            Value::BuiltinFunction("print_line".to_string()),
+        );
+
+        // List functions - basic
         env.define(
             "length".to_string(),
             Value::BuiltinFunction("length".to_string()),
@@ -216,15 +232,172 @@ impl Environment {
             Value::BuiltinFunction("reverse".to_string()),
         );
 
-        // Math functions
+        // List functions - advanced
+        env.define("map".to_string(), Value::BuiltinFunction("map".to_string()));
+        env.define(
+            "filter".to_string(),
+            Value::BuiltinFunction("filter".to_string()),
+        );
+        env.define(
+            "fold".to_string(),
+            Value::BuiltinFunction("fold".to_string()),
+        );
+        env.define(
+            "reduce".to_string(),
+            Value::BuiltinFunction("reduce".to_string()),
+        );
+        env.define("zip".to_string(), Value::BuiltinFunction("zip".to_string()));
+        env.define(
+            "take".to_string(),
+            Value::BuiltinFunction("take".to_string()),
+        );
+        env.define(
+            "drop".to_string(),
+            Value::BuiltinFunction("drop".to_string()),
+        );
+        env.define(
+            "concat".to_string(),
+            Value::BuiltinFunction("concat".to_string()),
+        );
+        env.define(
+            "flatten".to_string(),
+            Value::BuiltinFunction("flatten".to_string()),
+        );
+        env.define(
+            "sort".to_string(),
+            Value::BuiltinFunction("sort".to_string()),
+        );
+        env.define(
+            "contains".to_string(),
+            Value::BuiltinFunction("contains".to_string()),
+        );
+        env.define(
+            "index_of".to_string(),
+            Value::BuiltinFunction("index_of".to_string()),
+        );
+
+        // String functions
+        env.define(
+            "string_length".to_string(),
+            Value::BuiltinFunction("string_length".to_string()),
+        );
+        env.define(
+            "string_concat".to_string(),
+            Value::BuiltinFunction("string_concat".to_string()),
+        );
+        env.define(
+            "string_split".to_string(),
+            Value::BuiltinFunction("string_split".to_string()),
+        );
+        env.define(
+            "string_join".to_string(),
+            Value::BuiltinFunction("string_join".to_string()),
+        );
+        env.define(
+            "string_trim".to_string(),
+            Value::BuiltinFunction("string_trim".to_string()),
+        );
+        env.define(
+            "string_upper".to_string(),
+            Value::BuiltinFunction("string_upper".to_string()),
+        );
+        env.define(
+            "string_lower".to_string(),
+            Value::BuiltinFunction("string_lower".to_string()),
+        );
+        env.define(
+            "string_replace".to_string(),
+            Value::BuiltinFunction("string_replace".to_string()),
+        );
+        env.define(
+            "string_contains".to_string(),
+            Value::BuiltinFunction("string_contains".to_string()),
+        );
+        env.define(
+            "string_starts_with".to_string(),
+            Value::BuiltinFunction("string_starts_with".to_string()),
+        );
+        env.define(
+            "string_ends_with".to_string(),
+            Value::BuiltinFunction("string_ends_with".to_string()),
+        );
+        env.define(
+            "char_at".to_string(),
+            Value::BuiltinFunction("char_at".to_string()),
+        );
+
+        // Math functions - basic
         env.define("abs".to_string(), Value::BuiltinFunction("abs".to_string()));
         env.define("min".to_string(), Value::BuiltinFunction("min".to_string()));
         env.define("max".to_string(), Value::BuiltinFunction("max".to_string()));
+        env.define(
+            "sign".to_string(),
+            Value::BuiltinFunction("sign".to_string()),
+        );
+
+        // Math functions - advanced
+        env.define(
+            "sqrt".to_string(),
+            Value::BuiltinFunction("sqrt".to_string()),
+        );
+        env.define("pow".to_string(), Value::BuiltinFunction("pow".to_string()));
+        env.define("exp".to_string(), Value::BuiltinFunction("exp".to_string()));
+        env.define("log".to_string(), Value::BuiltinFunction("log".to_string()));
+        env.define("ln".to_string(), Value::BuiltinFunction("ln".to_string()));
+        env.define("sin".to_string(), Value::BuiltinFunction("sin".to_string()));
+        env.define("cos".to_string(), Value::BuiltinFunction("cos".to_string()));
+        env.define("tan".to_string(), Value::BuiltinFunction("tan".to_string()));
+        env.define(
+            "asin".to_string(),
+            Value::BuiltinFunction("asin".to_string()),
+        );
+        env.define(
+            "acos".to_string(),
+            Value::BuiltinFunction("acos".to_string()),
+        );
+        env.define(
+            "atan".to_string(),
+            Value::BuiltinFunction("atan".to_string()),
+        );
+        env.define(
+            "floor".to_string(),
+            Value::BuiltinFunction("floor".to_string()),
+        );
+        env.define(
+            "ceil".to_string(),
+            Value::BuiltinFunction("ceil".to_string()),
+        );
+        env.define(
+            "round".to_string(),
+            Value::BuiltinFunction("round".to_string()),
+        );
+
+        // Math constants
+        env.define("pi".to_string(), Value::Float(std::f64::consts::PI));
+        env.define("e".to_string(), Value::Float(std::f64::consts::E));
+
+        // Type conversion functions
+        env.define(
+            "to_string".to_string(),
+            Value::BuiltinFunction("to_string".to_string()),
+        );
+        env.define(
+            "to_int".to_string(),
+            Value::BuiltinFunction("to_int".to_string()),
+        );
+        env.define(
+            "to_float".to_string(),
+            Value::BuiltinFunction("to_float".to_string()),
+        );
 
         // Type predicates
         env.define(
             "int?".to_string(),
             Value::BuiltinFunction("int?".to_string()),
+        );
+        env.define(
+            "float?".to_string(),
+            Value::BuiltinFunction("float?".to_string()),
         );
         env.define(
             "string?".to_string(),
@@ -241,6 +414,28 @@ impl Environment {
         env.define(
             "function?".to_string(),
             Value::BuiltinFunction("function?".to_string()),
+        );
+        env.define(
+            "unit?".to_string(),
+            Value::BuiltinFunction("unit?".to_string()),
+        );
+
+        // Utility functions
+        env.define(
+            "identity".to_string(),
+            Value::BuiltinFunction("identity".to_string()),
+        );
+        env.define(
+            "const".to_string(),
+            Value::BuiltinFunction("const".to_string()),
+        );
+        env.define(
+            "compose".to_string(),
+            Value::BuiltinFunction("compose".to_string()),
+        );
+        env.define(
+            "apply".to_string(),
+            Value::BuiltinFunction("apply".to_string()),
         );
 
         env

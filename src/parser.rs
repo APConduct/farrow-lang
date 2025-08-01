@@ -1,5 +1,5 @@
 use crate::ast::{BinOp, Expr, Literal, Pattern, Span, Spanned, SpannedExpr, SpannedPattern};
-use crate::lexer::Token;
+use crate::lexer::{OrderedFloat, Token};
 
 #[derive(Debug, Clone)]
 pub struct Parser {
@@ -277,6 +277,12 @@ impl Parser {
             return Ok(self.spanned(Expr::Lit(Literal::Int(n))));
         }
 
+        if let Token::Float(OrderedFloat(f)) = self.peek() {
+            let f = *f;
+            self.advance();
+            return Ok(self.spanned(Expr::Lit(Literal::Float(f))));
+        }
+
         if let Token::String(s) = self.peek() {
             let s = s.clone();
             self.advance();
@@ -451,7 +457,7 @@ impl Parser {
 
             // Parse expressions separated by semicolons
             loop {
-                expressions.push(self.parse_expression()?);
+                expressions.push(self.parse_block_statement()?);
 
                 // Check for semicolon or end of block
                 if self.match_token(&Token::Semicolon) {
@@ -495,6 +501,7 @@ impl Parser {
         matches!(
             self.peek(),
             Token::Integer(_)
+                | Token::Float(_)
                 | Token::String(_)
                 | Token::True
                 | Token::False
@@ -532,6 +539,84 @@ impl Parser {
         self.application()
     }
 
+    fn parse_block_statement(&mut self) -> Result<SpannedExpr, String> {
+        // Special handling for let statements in blocks
+        if self.check(&Token::Let) {
+            // Look ahead to see if this is a block-style let (no 'in') or regular let-in
+            let mut lookahead = self.current + 1;
+
+            // Skip past identifier and :=
+            if lookahead < self.tokens.len()
+                && matches!(self.tokens[lookahead].0, Token::Identifier(_))
+            {
+                lookahead += 1;
+                if lookahead < self.tokens.len()
+                    && matches!(self.tokens[lookahead].0, Token::Assign)
+                {
+                    lookahead += 1;
+
+                    // Skip past the value expression to find 'in' or end
+                    let mut paren_depth = 0;
+                    let mut bracket_depth = 0;
+                    let mut brace_depth = 0;
+
+                    while lookahead < self.tokens.len() {
+                        match &self.tokens[lookahead].0 {
+                            Token::LeftParen => paren_depth += 1,
+                            Token::RightParen => paren_depth -= 1,
+                            Token::LeftBracket => bracket_depth += 1,
+                            Token::RightBracket => bracket_depth -= 1,
+                            Token::LeftBrace => brace_depth += 1,
+                            Token::RightBrace => {
+                                brace_depth -= 1;
+                                if brace_depth < 0 && paren_depth == 0 && bracket_depth == 0 {
+                                    // We've reached the end of the block
+                                    break;
+                                }
+                            }
+                            Token::In
+                                if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 =>
+                            {
+                                // Found 'in' at top level - this is a regular let-in expression
+                                return self.parse_expression();
+                            }
+                            Token::Semicolon
+                                if paren_depth == 0 && bracket_depth == 0 && brace_depth == 0 =>
+                            {
+                                // Found semicolon at top level - this is a block-style let
+                                break;
+                            }
+                            _ => {}
+                        }
+                        lookahead += 1;
+                    }
+
+                    // If we get here, it's likely a block-style let statement
+                    self.advance(); // consume 'let'
+                    if let Token::Identifier(name) = self.peek() {
+                        let name = name.clone();
+                        self.advance();
+                        if self.match_token(&Token::Assign) {
+                            let value = self.parse_expression()?;
+                            // In block context, let statements don't require 'in' clause
+                            // Treat as let x := value in ()
+                            let unit_body = self.spanned(Expr::Lit(Literal::Unit));
+                            return Ok(self.spanned(Expr::Let {
+                                name,
+                                value: Box::new(value),
+                                body: Box::new(unit_body),
+                            }));
+                        }
+                    }
+                    return Err("Invalid let statement in block".to_string());
+                }
+            }
+        }
+
+        // For non-let statements or regular let-in expressions, parse as normal expression
+        self.parse_expression()
+    }
+
     fn parse_pattern(&mut self) -> Result<SpannedPattern, String> {
         if self.check(&Token::Wildcard) {
             self.advance();
@@ -542,6 +627,12 @@ impl Parser {
             let n = *n;
             self.advance();
             return Ok(self.spanned(Pattern::Lit(Literal::Int(n))));
+        }
+
+        if let Token::Float(OrderedFloat(f)) = self.peek() {
+            let f = *f;
+            self.advance();
+            return Ok(self.spanned(Pattern::Lit(Literal::Float(f))));
         }
 
         if let Token::String(s) = self.peek() {

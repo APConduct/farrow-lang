@@ -146,6 +146,9 @@ impl Evaluator {
                 result
             }
             Value::BuiltinFunction(name) => self.eval_builtin(&name, arg_val),
+            Value::BuiltinFunction2(name, first_arg) => {
+                self.eval_builtin_2(&name, &first_arg, arg_val)
+            }
             _ => Err(RuntimeError::invalid_application(func_val.type_name())),
         }
     }
@@ -192,6 +195,9 @@ impl Evaluator {
                         self.eval_expr(&new_env, &body)
                     }
                     Value::BuiltinFunction(name) => self.eval_builtin(&name, left_val),
+                    Value::BuiltinFunction2(name, first_arg) => {
+                        self.eval_builtin_2(&name, &first_arg, left_val)
+                    }
                     func_val => Err(RuntimeError::invalid_application(func_val.type_name())),
                 }
             }
@@ -405,16 +411,22 @@ impl Evaluator {
         let block_env = env.extend();
         let mut result = Value::Unit;
 
-        for (i, expr) in exprs.iter().enumerate() {
-            result = self.eval_expr(&block_env, expr)?;
-
-            // For let expressions that aren't the last in the block,
-            // add their bindings to the block environment
-            if i < exprs.len() - 1 {
-                if let Expr::Let { name, value, .. } = &expr.node {
+        for expr in exprs.iter() {
+            // Special handling for let statements in blocks
+            if let Expr::Let { name, value, body } = &expr.node {
+                // Check if this is a block-style let (with unit body)
+                if matches!(body.node, Expr::Lit(Literal::Unit)) {
+                    // Evaluate the value and add to block environment
                     let val = self.eval_expr(&block_env, value)?;
                     block_env.define(name.clone(), val);
+                    result = Value::Unit;
+                } else {
+                    // Regular let expression
+                    result = self.eval_expr(&block_env, expr)?;
                 }
+            } else {
+                // Regular expression
+                result = self.eval_expr(&block_env, expr)?;
             }
         }
 
@@ -483,12 +495,30 @@ impl Evaluator {
     }
 
     /// Evaluate built-in functions
-    fn eval_builtin(&self, name: &str, arg: Value) -> RuntimeResult<Value> {
+    fn eval_builtin(&mut self, name: &str, arg: Value) -> RuntimeResult<Value> {
+        // Check if this is a multi-argument function that needs currying
         match name {
+            "map" | "filter" | "fold" | "reduce" | "zip" | "take" | "drop" | "concat"
+            | "contains" | "index_of" | "string_concat" | "string_split" | "string_join"
+            | "string_replace" | "string_contains" | "string_starts_with" | "string_ends_with"
+            | "char_at" | "min" | "max" | "pow" | "const" | "compose" | "apply" => {
+                // Return a partially applied function
+                return Ok(Value::BuiltinFunction2(name.to_string(), Box::new(arg)));
+            }
+            _ => {}
+        }
+        match name {
+            // I/O functions
             "print" => {
+                print!("{}", arg);
+                Ok(Value::Unit)
+            }
+            "println" | "print_line" => {
                 println!("{}", arg);
                 Ok(Value::Unit)
             }
+
+            // Basic list functions
             "length" => match arg {
                 Value::List(list) => Ok(Value::Int(list.len() as i64)),
                 Value::String(s) => Ok(Value::Int(s.len() as i64)),
@@ -519,28 +549,364 @@ impl Evaluator {
             },
             "empty?" => match arg {
                 Value::List(list) => Ok(Value::Bool(list.is_empty())),
-                _ => Err(RuntimeError::type_mismatch("list", arg.type_name())),
+                Value::String(s) => Ok(Value::Bool(s.is_empty())),
+                _ => Err(RuntimeError::type_mismatch(
+                    "list or string",
+                    arg.type_name(),
+                )),
             },
             "reverse" => match arg {
                 Value::List(mut list) => {
                     list.reverse();
                     Ok(Value::List(list))
                 }
+                Value::String(s) => Ok(Value::String(s.chars().rev().collect())),
+                _ => Err(RuntimeError::type_mismatch(
+                    "list or string",
+                    arg.type_name(),
+                )),
+            },
+
+            // Advanced list functions (higher-order - need special handling)
+            "sort" => match arg {
+                Value::List(mut list) => {
+                    // Simple sort for comparable values
+                    list.sort_by(|a, b| match (a, b) {
+                        (Value::Int(a), Value::Int(b)) => a.cmp(b),
+                        (Value::Float(a), Value::Float(b)) => {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        (Value::String(a), Value::String(b)) => a.cmp(b),
+                        _ => std::cmp::Ordering::Equal,
+                    });
+                    Ok(Value::List(list))
+                }
                 _ => Err(RuntimeError::type_mismatch("list", arg.type_name())),
             },
+            "flatten" => match arg {
+                Value::List(list) => {
+                    let mut result = Vec::new();
+                    for item in list {
+                        match item {
+                            Value::List(inner) => result.extend(inner),
+                            other => result.push(other),
+                        }
+                    }
+                    Ok(Value::List(result))
+                }
+                _ => Err(RuntimeError::type_mismatch("list", arg.type_name())),
+            },
+
+            // String functions
+            "string_length" => match arg {
+                Value::String(s) => Ok(Value::Int(s.len() as i64)),
+                _ => Err(RuntimeError::type_mismatch("string", arg.type_name())),
+            },
+            "string_trim" => match arg {
+                Value::String(s) => Ok(Value::String(s.trim().to_string())),
+                _ => Err(RuntimeError::type_mismatch("string", arg.type_name())),
+            },
+            "string_upper" => match arg {
+                Value::String(s) => Ok(Value::String(s.to_uppercase())),
+                _ => Err(RuntimeError::type_mismatch("string", arg.type_name())),
+            },
+            "string_lower" => match arg {
+                Value::String(s) => Ok(Value::String(s.to_lowercase())),
+                _ => Err(RuntimeError::type_mismatch("string", arg.type_name())),
+            },
+
+            // Basic math functions
             "abs" => match arg {
                 Value::Int(n) => Ok(Value::Int(n.abs())),
                 Value::Float(f) => Ok(Value::Float(f.abs())),
                 _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
             },
+            "sign" => match arg {
+                Value::Int(n) => Ok(Value::Int(n.signum())),
+                Value::Float(f) => Ok(Value::Float(f.signum())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "sqrt" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).sqrt())),
+                Value::Float(f) => Ok(Value::Float(f.sqrt())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "exp" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).exp())),
+                Value::Float(f) => Ok(Value::Float(f.exp())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "log" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).log10())),
+                Value::Float(f) => Ok(Value::Float(f.log10())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "ln" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).ln())),
+                Value::Float(f) => Ok(Value::Float(f.ln())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "sin" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).sin())),
+                Value::Float(f) => Ok(Value::Float(f.sin())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "cos" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).cos())),
+                Value::Float(f) => Ok(Value::Float(f.cos())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "tan" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).tan())),
+                Value::Float(f) => Ok(Value::Float(f.tan())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "asin" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).asin())),
+                Value::Float(f) => Ok(Value::Float(f.asin())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "acos" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).acos())),
+                Value::Float(f) => Ok(Value::Float(f.acos())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "atan" => match arg {
+                Value::Int(n) => Ok(Value::Float((n as f64).atan())),
+                Value::Float(f) => Ok(Value::Float(f.atan())),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "floor" => match arg {
+                Value::Int(n) => Ok(Value::Int(n)),
+                Value::Float(f) => Ok(Value::Int(f.floor() as i64)),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "ceil" => match arg {
+                Value::Int(n) => Ok(Value::Int(n)),
+                Value::Float(f) => Ok(Value::Int(f.ceil() as i64)),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+            "round" => match arg {
+                Value::Int(n) => Ok(Value::Int(n)),
+                Value::Float(f) => Ok(Value::Int(f.round() as i64)),
+                _ => Err(RuntimeError::type_mismatch("number", arg.type_name())),
+            },
+
+            // Type conversion functions
+            "to_string" => match arg {
+                Value::String(s) => Ok(Value::String(s)),
+                other => Ok(Value::String(other.to_string())),
+            },
+            "to_int" => match arg {
+                Value::Int(n) => Ok(Value::Int(n)),
+                Value::Float(f) => Ok(Value::Int(f as i64)),
+                Value::String(s) => s
+                    .parse::<i64>()
+                    .map(Value::Int)
+                    .map_err(|_| RuntimeError::custom(&format!("Cannot parse '{}' as integer", s))),
+                _ => Err(RuntimeError::type_mismatch(
+                    "number or string",
+                    arg.type_name(),
+                )),
+            },
+            "to_float" => match arg {
+                Value::Int(n) => Ok(Value::Float(n as f64)),
+                Value::Float(f) => Ok(Value::Float(f)),
+                Value::String(s) => s
+                    .parse::<f64>()
+                    .map(Value::Float)
+                    .map_err(|_| RuntimeError::custom(&format!("Cannot parse '{}' as float", s))),
+                _ => Err(RuntimeError::type_mismatch(
+                    "number or string",
+                    arg.type_name(),
+                )),
+            },
+
+            // Type predicates
             "int?" => Ok(Value::Bool(matches!(arg, Value::Int(_)))),
+            "float?" => Ok(Value::Bool(matches!(arg, Value::Float(_)))),
             "string?" => Ok(Value::Bool(matches!(arg, Value::String(_)))),
             "bool?" => Ok(Value::Bool(matches!(arg, Value::Bool(_)))),
             "list?" => Ok(Value::Bool(matches!(arg, Value::List(_)))),
             "function?" => Ok(Value::Bool(arg.is_callable())),
+            "unit?" => Ok(Value::Bool(matches!(arg, Value::Unit))),
+
+            // Utility functions
+            "identity" => Ok(arg),
+
             _ => Err(RuntimeError::builtin_error(
                 name,
                 &format!("Unknown built-in function: {}", name),
+            )),
+        }
+    }
+
+    /// Evaluate two-argument built-in functions
+    fn eval_builtin_2(&mut self, name: &str, arg1: &Value, arg2: Value) -> RuntimeResult<Value> {
+        match name {
+            "map" => match (arg1, arg2) {
+                (func, Value::List(list)) => {
+                    let mut result = Vec::new();
+                    for item in list {
+                        let mapped = match func {
+                            Value::Function { param, body, env } => {
+                                let new_env = env.extend();
+                                new_env.define(param.clone(), item);
+                                self.eval_expr(&new_env, body)?
+                            }
+                            Value::BuiltinFunction(name) => self.eval_builtin(name, item)?,
+                            _ => return Err(RuntimeError::invalid_application(func.type_name())),
+                        };
+                        result.push(mapped);
+                    }
+                    Ok(Value::List(result))
+                }
+                _ => Err(RuntimeError::type_mismatch("function and list", "other")),
+            },
+            "filter" => match (arg1, arg2) {
+                (func, Value::List(list)) => {
+                    let mut result = Vec::new();
+                    for item in list {
+                        let keep = match func {
+                            Value::Function { param, body, env } => {
+                                let new_env = env.extend();
+                                new_env.define(param.clone(), item.clone());
+                                self.eval_expr(&new_env, body)?
+                            }
+                            Value::BuiltinFunction(name) => {
+                                self.eval_builtin(name, item.clone())?
+                            }
+                            _ => return Err(RuntimeError::invalid_application(func.type_name())),
+                        };
+                        if keep.is_truthy() {
+                            result.push(item);
+                        }
+                    }
+                    Ok(Value::List(result))
+                }
+                _ => Err(RuntimeError::type_mismatch("function and list", "other")),
+            },
+            "min" => match (arg1, &arg2) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(*a.min(b))),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.min(*b))),
+                (Value::Int(a), Value::Float(b)) => Ok(Value::Float((*a as f64).min(*b))),
+                (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a.min(*b as f64))),
+                _ => Err(RuntimeError::type_mismatch("two numbers", "other")),
+            },
+            "max" => match (arg1, &arg2) {
+                (Value::Int(a), Value::Int(b)) => Ok(Value::Int(*a.max(b))),
+                (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.max(*b))),
+                (Value::Int(a), Value::Float(b)) => Ok(Value::Float((*a as f64).max(*b))),
+                (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a.max(*b as f64))),
+                _ => Err(RuntimeError::type_mismatch("two numbers", "other")),
+            },
+            "pow" => match (arg1, &arg2) {
+                (Value::Int(base), Value::Int(exp)) => {
+                    Ok(Value::Float((*base as f64).powf(*exp as f64)))
+                }
+                (Value::Float(base), Value::Float(exp)) => Ok(Value::Float(base.powf(*exp))),
+                (Value::Int(base), Value::Float(exp)) => {
+                    Ok(Value::Float((*base as f64).powf(*exp)))
+                }
+                (Value::Float(base), Value::Int(exp)) => Ok(Value::Float(base.powf(*exp as f64))),
+                _ => Err(RuntimeError::type_mismatch("two numbers", "other")),
+            },
+            "take" => match (arg1, arg2) {
+                (Value::Int(n), Value::List(list)) => {
+                    let take_count = (*n as usize).min(list.len());
+                    Ok(Value::List(list.into_iter().take(take_count).collect()))
+                }
+                _ => Err(RuntimeError::type_mismatch("integer and list", "other")),
+            },
+            "drop" => match (arg1, arg2) {
+                (Value::Int(n), Value::List(list)) => {
+                    let drop_count = (*n as usize).min(list.len());
+                    Ok(Value::List(list.into_iter().skip(drop_count).collect()))
+                }
+                _ => Err(RuntimeError::type_mismatch("integer and list", "other")),
+            },
+            "concat" => match (arg1, arg2) {
+                (Value::List(list1), Value::List(list2)) => {
+                    let mut result = list1.clone();
+                    result.extend(list2);
+                    Ok(Value::List(result))
+                }
+                _ => Err(RuntimeError::type_mismatch("two lists", "other")),
+            },
+            "contains" => match (arg1, arg2) {
+                (needle, Value::List(haystack)) => Ok(Value::Bool(haystack.contains(needle))),
+                (Value::String(needle), Value::String(haystack)) => {
+                    Ok(Value::Bool(haystack.contains(needle)))
+                }
+                _ => Err(RuntimeError::type_mismatch(
+                    "value and list/string",
+                    "other",
+                )),
+            },
+            "string_concat" => match (arg1, arg2) {
+                (Value::String(s1), Value::String(s2)) => {
+                    Ok(Value::String(format!("{}{}", s1, s2)))
+                }
+                _ => Err(RuntimeError::type_mismatch("two strings", "other")),
+            },
+            "string_split" => match (arg1, arg2) {
+                (Value::String(delimiter), Value::String(text)) => {
+                    let parts: Vec<Value> = text
+                        .split(delimiter)
+                        .map(|s| Value::String(s.to_string()))
+                        .collect();
+                    Ok(Value::List(parts))
+                }
+                _ => Err(RuntimeError::type_mismatch("two strings", "other")),
+            },
+            "string_contains" => match (arg1, arg2) {
+                (Value::String(needle), Value::String(haystack)) => {
+                    Ok(Value::Bool(haystack.contains(needle)))
+                }
+                _ => Err(RuntimeError::type_mismatch("two strings", "other")),
+            },
+            "string_starts_with" => match (arg1, arg2) {
+                (Value::String(prefix), Value::String(text)) => {
+                    Ok(Value::Bool(text.starts_with(prefix)))
+                }
+                _ => Err(RuntimeError::type_mismatch("two strings", "other")),
+            },
+            "string_ends_with" => match (arg1, arg2) {
+                (Value::String(suffix), Value::String(text)) => {
+                    Ok(Value::Bool(text.ends_with(suffix)))
+                }
+                _ => Err(RuntimeError::type_mismatch("two strings", "other")),
+            },
+            "char_at" => match (arg1, arg2) {
+                (Value::Int(index), Value::String(text)) => {
+                    if *index < 0 || *index >= text.len() as i64 {
+                        Err(RuntimeError::custom("String index out of bounds"))
+                    } else {
+                        let char = text.chars().nth(*index as usize).unwrap();
+                        Ok(Value::String(char.to_string()))
+                    }
+                }
+                _ => Err(RuntimeError::type_mismatch("integer and string", "other")),
+            },
+            "const" => {
+                // const x y = x (returns first argument, ignoring second)
+                Ok(arg1.clone())
+            }
+            "apply" => {
+                // apply f x = f x
+                match arg1 {
+                    Value::Function { param, body, env } => {
+                        let new_env = env.extend();
+                        new_env.define(param.clone(), arg2);
+                        self.eval_expr(&new_env, body)
+                    }
+                    Value::BuiltinFunction(name) => self.eval_builtin(name, arg2),
+                    _ => Err(RuntimeError::invalid_application(arg1.type_name())),
+                }
+            }
+            _ => Err(RuntimeError::builtin_error(
+                name,
+                &format!("Unknown two-argument built-in function: {}", name),
             )),
         }
     }

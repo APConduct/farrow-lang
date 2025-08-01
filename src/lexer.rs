@@ -1,5 +1,16 @@
 use logos::Logos;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrderedFloat(pub f64);
+
+impl std::hash::Hash for OrderedFloat {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.to_bits().hash(state);
+    }
+}
+
+impl Eq for OrderedFloat {}
+
 #[derive(Logos, Debug, Clone, PartialEq, Eq, Hash)]
 #[logos(skip r"[ \t\n\f]+")]
 pub enum Token {
@@ -115,10 +126,12 @@ pub enum Token {
     Wildcard,
 
     // Literals
+    #[regex(r"-?[0-9]+\.[0-9]+", |lex| lex.slice().parse::<f64>().map(OrderedFloat).ok())]
+    Float(OrderedFloat),
+
     #[regex(r"-?[0-9]+", |lex| lex.slice().parse::<i64>().ok())]
     Integer(i64),
 
-    // Removed Float to avoid Hash/Eq issues for now
     #[regex(r#""([^"\\]|\\.)*""#, |lex| {
         let s = lex.slice();
         // Remove surrounding quotes and handle escape sequences
@@ -254,7 +267,7 @@ impl std::fmt::Display for Token {
             Token::Pipe_ => write!(f, "|"),
             Token::Wildcard => write!(f, "_"),
             Token::Integer(n) => write!(f, "{}", n),
-            // Token::Float(n) => write!(f, "{}", n),
+            Token::Float(OrderedFloat(n)) => write!(f, "{}", n),
             Token::String(s) => write!(f, "\"{}\"", s),
             Token::Identifier(s) => write!(f, "{}", s),
             Token::LineComment => write!(f, "-- comment"),
@@ -319,6 +332,14 @@ mod tests {
         let tokens = tokenize(input).unwrap();
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].0, Token::String("hello world".to_string()));
+    }
+
+    #[test]
+    fn test_tokenize_float() {
+        let input = "3.14";
+        let tokens = tokenize(input).unwrap();
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].0, Token::Float(OrderedFloat(3.14)));
     }
 
     #[test]
