@@ -1,8 +1,7 @@
 -- Factorial function using recursion
 factorial := μf |-> n ->
   case n of
-    0 => 1
+    0 => 1,
     _ => n * (f (n - 1))
 
--- Test it
 factorial 5

@@ -80,8 +80,11 @@ fn read_from_stdin() {
         Ok(_) => {
             if !input.trim().is_empty() {
                 // Try parsing as module first, then fall back to expression
-                let result = if input.contains("type ") || input.contains("data ") {
-                    // Looks like it contains type definitions, parse as module
+                let result = if input.contains("type ")
+                    || input.contains("data ")
+                    || has_top_level_declarations(&input)
+                {
+                    // Looks like it contains type definitions or top-level declarations, parse as module
                     match parse_module_from_str(&input) {
                         Ok(module) => {
                             let mut evaluator = Evaluator::new();
@@ -126,6 +129,38 @@ fn read_from_stdin() {
     }
 }
 
+fn has_top_level_declarations(content: &str) -> bool {
+    // Check if the content has top-level value declarations (identifier := ...)
+    for line in content.lines() {
+        let trimmed = line.trim();
+        // Skip comments and empty lines
+        if trimmed.is_empty() || trimmed.starts_with("--") {
+            continue;
+        }
+
+        // Look for pattern: identifier := ...
+        if let Some(assign_pos) = trimmed.find(":=") {
+            let before_assign = trimmed[..assign_pos].trim();
+            // Check if it's a valid identifier (not a complex expression)
+            if !before_assign.is_empty()
+                && before_assign
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_')
+                && before_assign
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_alphabetic() || c == '_')
+                && !before_assign.contains(' ')
+                && !before_assign.contains('(')
+                && !before_assign.contains('[')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn show_help() {
     println!("Farrow Programming Language");
     println!("Usage:");
@@ -146,8 +181,11 @@ fn run_file(filename: &str) {
     match fs::read_to_string(filename) {
         Ok(content) => {
             // Try parsing as module first, then fall back to expression
-            let result = if content.contains("type ") || content.contains("data ") {
-                // Looks like it contains type definitions, parse as module
+            let result = if content.contains("type ")
+                || content.contains("data ")
+                || has_top_level_declarations(&content)
+            {
+                // Looks like it contains type definitions or top-level declarations, parse as module
                 match parse_module_from_str(&content) {
                     Ok(module) => {
                         let mut evaluator = Evaluator::new();

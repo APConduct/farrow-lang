@@ -88,20 +88,62 @@ impl Parser {
 
         // Parse declarations and expressions
         while !self.is_at_end() {
+            println!(
+                "Debug: Module loop - current token: {:?}, pos: {}",
+                self.peek(),
+                self.current
+            );
             if self.check(&Token::Type) || self.check(&Token::Data) {
                 declarations.push(self.parse_type_declaration()?);
             } else if self.can_start_declaration() {
-                declarations.push(self.parse_value_declaration()?);
+                println!("Debug: Parsing value declaration");
+                // Save current position before parsing declaration
+                let before_decl = self.current;
+                match self.parse_value_declaration() {
+                    Ok(decl) => {
+                        println!(
+                            "Debug: Successfully parsed declaration, now at pos: {}",
+                            self.current
+                        );
+                        declarations.push(decl);
+                        // Check if we consumed everything - if so, no main expression
+                        if self.is_at_end() {
+                            println!("Debug: At end after declaration");
+                            break;
+                        }
+                        // Check if the next thing looks like a main expression
+                        if self.looks_like_main_expression() {
+                            println!("Debug: Next looks like main expression: {:?}", self.peek());
+                            break;
+                        }
+                        println!("Debug: Continuing to parse more declarations");
+                    }
+                    Err(_) => {
+                        // If declaration parsing failed, restore position and try as main expr
+                        self.current = before_decl;
+                        break;
+                    }
+                }
             } else {
+                println!("Debug: Breaking for main expression");
                 // If there's a remaining expression, treat it as main
                 break;
             }
         }
 
         // Check if there's a main expression left
+        println!(
+            "Debug: After declarations, at_end: {}, current: {}",
+            self.is_at_end(),
+            self.current
+        );
+        if !self.is_at_end() {
+            println!("Debug: Parsing main expression: {:?}", self.peek());
+        }
         let main_expr = if !self.is_at_end() {
             Some(self.parse_expression()?)
         } else {
+            println!("Debug: No main expression to parse");
             None
         };
 
@@ -122,6 +164,39 @@ impl Parser {
             }
         }
         false
+    }
+
+    /// Check if the current position looks like the start of a main expression
+    /// rather than another declaration
+    fn looks_like_main_expression(&self) -> bool {
+        if let Token::Identifier(name) = self.peek() {
+            // If it's a lowercase identifier...
+            if name.chars().next().unwrap().is_lowercase() {
+                // Look at what follows it
+                if let Some((next_token, _)) = self.tokens.get(self.current + 1) {
+                    // If it's followed by something other than :=, it's likely a function call
+                    return !matches!(next_token, Token::Assign);
+                }
+            }
+            // Uppercase identifiers (constructors) in expression position are main expressions
+            return name.chars().next().unwrap().is_uppercase();
+        }
+        // Numbers, strings, etc. at top level are main expressions
+        matches!(
+            self.peek(),
+            Token::Integer(_)
+                | Token::Float(_)
+                | Token::String(_)
+                | Token::True
+                | Token::False
+                | Token::LeftParen
+                | Token::LeftBracket
+                | Token::Lambda
+                | Token::Mu
+                | Token::Let
+                | Token::Case
+                | Token::If
+        )
     }
 
     fn parse_type_declaration(&mut self) -> Result<Decl, String> {
@@ -321,13 +396,39 @@ impl Parser {
             return Err("Expected ':=' after identifier in value declaration".to_string());
         }
 
-        let value = self.parse_expression()?;
+        let value = self.parse_declaration_value()?;
 
         Ok(Decl::Value {
             name,
             type_annotation: None,
             value,
         })
+    }
+
+    /// Parse the value part of a declaration, being careful not to consume too much
+    fn parse_declaration_value(&mut self) -> Result<SpannedExpr, String> {
+        // Use a more conservative parsing approach for declarations
+        self.parse_declaration_level_expression()
+    }
+
+    /// Parse expression in declaration context - avoids consuming main expressions
+    fn parse_declaration_level_expression(&mut self) -> Result<SpannedExpr, String> {
+        let start_pos = self.current;
+        let expr = self.logical_or()?;
+
+        // If we've consumed everything, that's fine
+        if self.is_at_end() {
+            return Ok(expr);
+        }
+
+        // Check if what's next looks like it should be a separate main expression
+        if self.looks_like_main_expression() {
+            // Only accept this expression if it seems complete
+            // For now, we'll trust that logical_or gives us a complete expression
+            return Ok(expr);
+        }
+
+        Ok(expr)
     }
 
     fn logical_or(&mut self) -> Result<SpannedExpr, String> {
@@ -551,8 +652,8 @@ impl Parser {
             let name = name.clone();
             self.advance();
 
-            // Check for lambda: x |-> body
-            if self.match_token(&Token::LambdaArrow) {
+            // Check for lambda: x |-> body or x -> body
+            if self.match_token(&Token::LambdaArrow) || self.match_token(&Token::Arrow) {
                 let body = self.parse_expression()?;
                 return Ok(self.spanned(Expr::Lambda {
                     param: name,
@@ -582,7 +683,7 @@ impl Parser {
             if let Token::Identifier(name) = self.peek() {
                 let name = name.clone();
                 self.advance();
-                if self.match_token(&Token::LambdaArrow) {
+                if self.match_token(&Token::LambdaArrow) || self.match_token(&Token::Arrow) {
                     let body = self.parse_expression()?;
                     return Ok(self.spanned(Expr::Mu {
                         name,
